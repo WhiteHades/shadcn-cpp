@@ -35,8 +35,9 @@ if git remote get-url origin >/dev/null 2>&1; then
   printf 'An origin remote already exists. Nothing was changed.\n' >&2; exit 1
 fi
 gh repo create "$repo" "$visibility" --source=. --remote=origin --push \
-  --description 'A native C++ port of shadcn/ui, built one component at a time.'
-gh repo edit "$repo" --add-topic cpp --add-topic qt6 --add-topic shadcn \
-  --add-topic ui-components --add-topic native-gui
+  --description 'Native C++23 and Qt 6 UI components inspired by shadcn/ui.'
+gh repo edit "$repo" --add-topic cpp --add-topic cpp23 --add-topic qt --add-topic qt6 \
+  --add-topic qt-widgets --add-topic shadcn --add-topic shadcn-ui \
+  --add-topic ui-components --add-topic component-library --add-topic gui
 printf 'Published %s. Check its Actions tab before treating the native build as verified.\n' "$repo"
 printf 'Version remains 0.1.0. No release tag was created.\n'

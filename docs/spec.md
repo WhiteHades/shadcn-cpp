@@ -43,7 +43,7 @@ The public interface includes ownership, thread-affinity, error and performance 
 
 The source manifest records hashes and independent evidence categories. A draft can exist without native verification, but it cannot be labelled complete. Wrapper review does not substitute for reading a Radix or Base UI implementation when it owns the behaviour.
 
-Documentation uses Docusaurus for guides and Doxygen for the C++ declarations. These build tools are not application runtime dependencies.
+Documentation uses Docusaurus for the guides and a C++ API reference generated from declarations and comments with clang-doc. The documentation build tools are not application runtime dependencies.
 
 ## Testing decisions
 

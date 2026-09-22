@@ -1,9 +1,9 @@
 name: Build documentation
 on:
   push:
-    paths: ['docs/**', 'website/**', 'include/**', 'Doxyfile', 'tools/**', 'upstream/**', 'VERSION', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'website/**', 'include/**', 'tools/**', 'upstream/**', 'VERSION', '.github/workflows/docs.yml']
   pull_request:
-    paths: ['docs/**', 'website/**', 'include/**', 'Doxyfile', 'tools/**', 'upstream/**', 'VERSION', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'website/**', 'include/**', 'tools/**', 'upstream/**', 'VERSION', '.github/workflows/docs.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,16 +17,18 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - run: sudo apt-get update && sudo apt-get install -y doxygen
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: sudo apt-get update && sudo apt-get install -y clang clang-tools libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 ninja-build
+      - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125
+        with:
+          version: '6.8.3'
+          host: linux
+          arch: linux_gcc_64
+          cache: false
       - run: bash tools/build-docs.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: documentation-site
           path: website/build
-          if-no-files-found: error
-      - name: Keep first-build lockfile for review
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: documentation-lockfile
-          path: website/package-lock.json
           if-no-files-found: error

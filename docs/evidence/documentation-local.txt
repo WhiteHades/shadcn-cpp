@@ -1,0 +1,41 @@
+Version 0.1.0; 62 registry entries; 10 draft records checked
+Manifest consistency passed. This is not a native build or parity certification.
+-- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR)
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: $REPO/.tmp/docs-setup/cmake
+[1/2] Processing file $REPO/include/shadcn/core.hpp.
+[2/2] Processing file $REPO/include/shadcn/widgets.hpp.
+Emiting docs in md format.
+Mapping decls...
+Collecting infos...
+Reducing 33 infos...
+Generating docs...
+Generating assets for docs...
+npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+
+added 1269 packages, and audited 1270 packages in 7s
+
+421 packages are looking for funding
+  run `npm fund` for details
+
+21 vulnerabilities (20 moderate, 1 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+> shadcn-cpp-docs@0.1.0 build
+> docusaurus build
+
+[INFO] [en] Creating an optimized production build...
+[webpackbar] ℹ Compiling Client
+[webpackbar] ℹ Compiling Server
+[webpackbar] ✔ Server: Compiled successfully in 6.98s
+[webpackbar] ✔ Client: Compiled successfully in 12.57s
+[SUCCESS] Generated static files in "build".
+[INFO] Use `npm run serve` command to test your build locally.

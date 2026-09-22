@@ -1,11 +1,11 @@
-# Decision 003: Docusaurus guides and Doxygen reference
+# Decision 003: Docusaurus with clang-doc
 
-Status: configured, build pending.
+Status: configured.
 
-Docusaurus builds Markdown guides into a documentation site with navigation, code blocks and light/dark styling. Doxygen extracts the C++ declarations and comments. Doxygen writes the generated reference into the site's static API directory during the documentation build.
+Docusaurus builds the guides and C++ API reference into one site with shared navigation, code blocks and light/dark styling. clang-doc extracts declarations and comments from the two public headers. A small formatter adapts its Markdown for the site, fixes enum tables and constructor headings, and removes Qt's generated metadata members.
 
-Docusaurus was selected as an established documentation-focused project. The GitHub pages checked during selection showed about 66,300 stars for Docusaurus and 27,500 for Material for MkDocs. That is a dated comparison of those options, not proof of a universal popularity ranking. The requirements are an open-source tool, readable output and a maintained build system, rather than stars alone.
+The API overview and ownership examples remain handwritten. Generated pages are rebuilt from the current headers. clang-doc's Markdown output omits some declaration details, including default arguments and qualifiers, so the reference links to the headers for exact declarations.
 
-Direct site dependencies are pinned. A resolved npm lockfile is still required. The authoring environment cannot reach the package registry, so no lockfile or successful site build has been fabricated. The first connected build generates a lockfile for review, after which CI uses npm ci.
+Site dependencies are locked in `website/package-lock.json`. Local and CI builds use `npm ci --ignore-scripts` followed by `npm run build`. Building the reference also requires Clang, clang-doc, CMake, Ninja and Qt. These tools are documentation build dependencies; applications only link the C++ library and Qt.
 
-[Docusaurus](https://docusaurus.io/docs) describes the guide-site tooling. [Doxygen](https://www.doxygen.nl/manual/starting.html) describes API generation. Their upstream repositories are [facebook/docusaurus](https://github.com/facebook/docusaurus) and [doxygen/doxygen](https://github.com/doxygen/doxygen).
+[Docusaurus](https://docusaurus.io/docs) documents the site tooling. [clang-doc](https://clang.llvm.org/extra/clang-doc.html) documents C++ extraction.

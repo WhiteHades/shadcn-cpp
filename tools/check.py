@@ -45,14 +45,14 @@ def main() -> int:
         if version != "0.1.0": raise ValueError("The maintainer has not authorised a version change")
         header = (ROOT / "include/shadcn/core.hpp").read_text()
         if f'version = "{version}"' not in header: raise ValueError("C++ version differs from VERSION")
-        doxyfile = (ROOT / "Doxyfile").read_text()
-        if not re.search(r'PROJECT_NUMBER\s*=\s*"' + re.escape(version) + '"', doxyfile):
-            raise ValueError("Doxygen version differs from VERSION")
+        if not (ROOT / "docs/api.md").is_file(): raise ValueError("C++ API guide is missing")
         manifest = json.loads((ROOT / "upstream/manifest.json").read_text())
         if manifest["library_version"] != version: raise ValueError("Manifest version differs")
         validate_manifest(manifest, ROOT)
         package = json.loads((ROOT / "website/package.json").read_text())
         if package["version"] != version: raise ValueError("Documentation package version differs")
+        if not (ROOT / "website/package-lock.json").is_file():
+            raise ValueError("Documentation package lockfile is missing")
         catalogue = json.loads((ROOT / "upstream/catalogue.json").read_text())
         ids = [x["id"] for x in catalogue["items"]]
         if len(ids) != len(set(ids)): raise ValueError("Duplicate catalogue item")

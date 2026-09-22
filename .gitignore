@@ -1,9 +1,9 @@
 /build/
+/.tmp/
 /website/node_modules/
 /website/.docusaurus/
 /website/build/
-/website/static/api/*
-!/website/static/api/.gitkeep
+/docs/api/generated/
 /upstream/.cache/
 /screenshots/
 *.user

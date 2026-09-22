@@ -28,7 +28,7 @@ cmake --build --preset asan
 ctest --preset asan
 ```
 
-The sanitizer presets support GCC and Clang with AddressSanitizer and UndefinedBehaviorSanitizer. They require the corresponding runtime libraries. Native checks have not run in the authoring environment. The three-platform workflow is configuration awaiting its first run.
+The sanitizer presets support GCC and Clang with AddressSanitizer and UndefinedBehaviorSanitizer. They require the corresponding runtime libraries. Linux native tests pass with Qt 6.11.2 and GCC 16.2.1. The local native sanitizer run reports platform-library leaks; see the [verification report](verification.md) for the commands and remaining platform checks.
 
 ## Installed consumer
 

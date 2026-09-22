@@ -18,7 +18,15 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - run: sudo apt-get update && sudo apt-get install -y doxygen
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: sudo apt-get update && sudo apt-get install -y clang clang-tools libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 ninja-build
+      - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125
+        with:
+          version: '6.8.3'
+          host: linux
+          arch: linux_gcc_64
+          cache: false
       - run: bash tools/build-docs.sh
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:

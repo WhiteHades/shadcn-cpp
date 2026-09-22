@@ -4,7 +4,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export default {
   title: 'shadcn-cpp',
-  tagline: 'Native C++ components, ported one at a time.',
+  tagline: 'Native C++23 and Qt 6 UI components inspired by shadcn/ui.',
   url: 'https://whitehades.github.io',
   baseUrl: '/shadcn-cpp/',
   organizationName: 'WhiteHades',
@@ -30,7 +30,7 @@ export default {
       title: 'shadcn-cpp',
       items: [
         {type: 'docSidebar', sidebarId: 'guide', position: 'left', label: 'Docs'},
-        {href: 'pathname:///shadcn-cpp/api/index.html', label: 'C++ reference', position: 'left'},
+        {to: '/api', label: 'C++ API', position: 'left'},
         {href: 'https://github.com/WhiteHades/shadcn-cpp', label: 'GitHub', position: 'right'},
       ],
     },

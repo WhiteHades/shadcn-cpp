@@ -8,7 +8,7 @@ Status: planned.
 
 ## Scope
 
-Generate and review the npm lockfile, build Docusaurus and Doxygen, fix broken links and verify public examples. Add reviewed source packaging, dependency notices and package-manager recipes after native gates pass.
+Review the npm lockfile, build the Docusaurus guides and API reference, fix broken links and verify public examples. Add reviewed source packaging, dependency notices and package-manager recipes after native gates pass.
 
 ## Acceptance
 
