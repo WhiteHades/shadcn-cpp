@@ -68,7 +68,7 @@ private slots:
     void labelActivatesBuddy() {
         QWidget root;
         auto* layout = new QVBoxLayout(&root);
-        auto& checkbox = shadcn::make_child<shadcn::Checkbox>(root);
+        auto& checkbox = shadcn::make_child<shadcn::Checkbox>(root, QString{});
         auto& label = shadcn::make_child<shadcn::Label>(root, "Mark complete");
         label.setBuddy(&checkbox);
         layout->addWidget(&label); layout->addWidget(&checkbox);
