@@ -17,7 +17,7 @@ jobs:
           python3 tools/upstream.py inventory --checkout "$RUNNER_TEMP/shadcn-ui" --output build/upstream-inventory.json
           candidate="$(git -C "$RUNNER_TEMP/shadcn-ui" rev-parse HEAD)"
           python3 tools/upstream.py changes --checkout "$RUNNER_TEMP/shadcn-ui" --candidate "$candidate" --output build/upstream-changes.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: upstream-review
           path: build/upstream-*.json
