@@ -1,0 +1,75 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 tools/check.py
+      - run: python3 -m unittest discover -s tests -p '*_test.py' -v
+      - run: cmake --preset core && cmake --build --preset core && ctest --preset core
+      - run: cmake --preset core-asan && cmake --build --preset core-asan && ctest --preset core-asan
+      - name: Installed core consumer
+        run: |
+          cmake --install build/core --prefix "$RUNNER_TEMP/shadcn-install"
+          cmake -S examples/consumer -B build/consumer -G Ninja -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/shadcn-install"
+          cmake --build build/consumer
+          ctest --test-dir build/consumer --output-on-failure
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            host: linux
+            arch: linux_gcc_64
+          - os: windows-2022
+            host: windows
+            arch: win64_msvc2022_64
+          - os: macos-15
+            host: mac
+            arch: clang_64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Linux platform libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0
+      - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125
+        with:
+          version: '6.8.3'
+          host: ${{ matrix.host }}
+          arch: ${{ matrix.arch }}
+          cache: false
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build/native -G "Visual Studio 17 2022" -A x64
+      - name: Configure Linux and macOS
+        if: runner.os != 'Windows'
+        run: cmake -S . -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build build/native --config Debug --parallel 2
+      - run: ctest --test-dir build/native -C Debug --output-on-failure --output-junit native-tests.xml
+      - name: Native sanitizer checks
+        if: runner.os == 'Linux'
+        run: cmake --preset asan && cmake --build --preset asan --parallel 2 && ctest --preset asan
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-results-${{ matrix.os }}
+          path: native-tests.xml
+          if-no-files-found: warn

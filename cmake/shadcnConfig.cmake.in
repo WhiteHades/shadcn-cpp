@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+if(@SHADCN_BUILD_WIDGETS@)
+    find_dependency(Qt6 6.8 COMPONENTS Widgets)
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/shadcnTargets.cmake")
+set(shadcn_core_FOUND TRUE)
+set(shadcn_widgets_FOUND @SHADCN_BUILD_WIDGETS@)
+check_required_components(shadcn)

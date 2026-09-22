@@ -1,0 +1,10 @@
+html {
+  --primary-color: #3f3f46;
+  --primary-dark-color: #18181b;
+  --primary-light-color: #71717a;
+  --font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-family-monospace: ui-monospace, monospace;
+}
+#projectname {font-weight: 600; letter-spacing: -0.03em;}
+.contents {max-width: 1000px; line-height: 1.6;}
+.memproto, .memdoc {border-radius: 6px; box-shadow: none;}

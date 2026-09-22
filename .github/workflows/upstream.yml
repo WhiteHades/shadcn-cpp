@@ -1,0 +1,24 @@
+name: Check upstream source
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Read upstream Git objects
+        run: |
+          git clone --filter=blob:none https://github.com/shadcn-ui/ui.git "$RUNNER_TEMP/shadcn-ui"
+          python3 tools/upstream.py verify --checkout "$RUNNER_TEMP/shadcn-ui" --output build/upstream-identity.json
+          python3 tools/upstream.py inventory --checkout "$RUNNER_TEMP/shadcn-ui" --output build/upstream-inventory.json
+          candidate="$(git -C "$RUNNER_TEMP/shadcn-ui" rev-parse HEAD)"
+          python3 tools/upstream.py changes --checkout "$RUNNER_TEMP/shadcn-ui" --candidate "$candidate" --output build/upstream-changes.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: upstream-review
+          path: build/upstream-*.json
+          if-no-files-found: error

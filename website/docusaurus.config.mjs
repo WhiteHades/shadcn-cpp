@@ -1,0 +1,43 @@
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+export default {
+  title: 'shadcn-cpp',
+  tagline: 'Native C++ components, ported one at a time.',
+  url: 'https://whitehades.github.io',
+  baseUrl: '/shadcn-cpp/',
+  organizationName: 'WhiteHades',
+  projectName: 'shadcn-cpp',
+  trailingSlash: false,
+  onBrokenLinks: 'throw',
+  markdown: {hooks: {onBrokenMarkdownLinks: 'throw'}},
+  i18n: {defaultLocale: 'en', locales: ['en']},
+  presets: [
+    ['classic', {
+      docs: {
+        path: path.resolve(here, '../docs'),
+        routeBasePath: '/',
+        sidebarPath: path.resolve(here, 'sidebars.mjs'),
+      },
+      blog: false,
+      theme: {customCss: path.resolve(here, 'src/css/custom.css')},
+    }],
+  ],
+  themeConfig: {
+    colorMode: {defaultMode: 'light', respectPrefersColorScheme: true},
+    navbar: {
+      title: 'shadcn-cpp',
+      items: [
+        {type: 'docSidebar', sidebarId: 'guide', position: 'left', label: 'Docs'},
+        {href: 'pathname:///shadcn-cpp/api/index.html', label: 'C++ reference', position: 'left'},
+        {href: 'https://github.com/WhiteHades/shadcn-cpp', label: 'GitHub', position: 'right'},
+      ],
+    },
+    footer: {
+      style: 'light',
+      copyright: 'shadcn-cpp 0.1.0 · MIT · Independent port, under development.',
+    },
+    prism: {additionalLanguages: ['cpp', 'cmake', 'bash', 'json']},
+  },
+};

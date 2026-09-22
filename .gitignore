@@ -1,0 +1,15 @@
+/build/
+/website/node_modules/
+/website/.docusaurus/
+/website/build/
+/website/static/api/*
+!/website/static/api/.gitkeep
+/upstream/.cache/
+/screenshots/
+*.user
+*.pyc
+__pycache__/
+.env
+.env.*
+.DS_Store
+CMakeUserPresets.json

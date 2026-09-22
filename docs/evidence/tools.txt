@@ -1,0 +1,17 @@
+$ python3 tools/check.py && python3 -m unittest discover -s tests -p "*_test.py" -v
+Exit code: 0
+
+Version 0.1.0; 62 registry entries; 10 draft records checked
+Manifest consistency passed. This is not a native build or parity certification.
+test_claim_without_evidence_fails (tools_test.ToolTests.test_claim_without_evidence_fails) ... ok
+test_declared_pass_still_needs_evidence (tools_test.ToolTests.test_declared_pass_still_needs_evidence) ... ok
+test_drafts_are_honest (tools_test.ToolTests.test_drafts_are_honest) ... ok
+test_full_commit_required (tools_test.ToolTests.test_full_commit_required) ... ok
+test_known_git_blob (tools_test.ToolTests.test_known_git_blob) ... ok
+test_local_git_verification_and_changes (tools_test.ToolTests.test_local_git_verification_and_changes) ... ok
+test_paths_reject_escape (tools_test.ToolTests.test_paths_reject_escape) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.034s
+
+OK
