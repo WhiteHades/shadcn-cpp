@@ -7,10 +7,10 @@
 
 namespace shadcn {
 
-/// The project version stays fixed until the maintainer requests a change.
+/// Library version.
 inline constexpr auto version = "0.1.0";
 
-/// Button appearances in the pinned New York v4 component.
+/// Button appearances.
 enum class Variant { Default, Destructive, Outline, Secondary, Ghost, Link };
 /// Button sizes, including all four sizes for icons.
 enum class ButtonSize { Default, Xs, Sm, Lg, Icon, IconXs, IconSm, IconLg };

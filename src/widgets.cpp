@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 // Design source: shadcn-ui/ui @ 98a1fe67b439324ddc857f47fbdce056600a4329.
-// See upstream/manifest.json for exact files, review status and remaining differences.
 #include <shadcn/widgets.hpp>
 
 #include <QAccessible>

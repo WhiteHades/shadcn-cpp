@@ -100,7 +100,7 @@ private:
     bool invalid_ = false;
 };
 
-/// A static text badge. Link composition is tracked separately in the parity ledger.
+/// A static text badge.
 class Badge : public QLabel {
     Q_OBJECT
 public:
