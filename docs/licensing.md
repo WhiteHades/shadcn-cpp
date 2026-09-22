@@ -1,6 +1,6 @@
 # Licensing and attribution
 
-The C++ implementation is MIT-licensed. Adapted shadcn design and component material retains the upstream MIT notice in `LICENSES/shadcn-MIT.txt`. Its contents match the pinned upstream licence blob. Keep both notices when redistributing substantial portions.
+The C++ implementation is covered by the MIT licence. Adapted shadcn design and component material retains the upstream MIT notice in `LICENSES/shadcn-MIT.txt`. Its contents match the pinned upstream licence blob. Keep both notices when redistributing substantial portions.
 
 Qt is a separate dependency with its own licence options and obligations. Applications must review the terms that apply to their chosen Qt distribution and linking method. The library's MIT licence does not replace Qt's terms. See [Qt licensing](https://www.qt.io/licensing/) and obtain legal advice where the intended distribution requires it.
 

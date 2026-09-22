@@ -16,11 +16,11 @@ Content, footer and action return borrowed Qt layouts. The card owns the layout 
 
 ## Known differences
 
-- CSS shadow-sm is absent.
-- Slots are layout accessors rather than eight separate upstream slot classes.
-- CSS container queries and arbitrary class overrides are not implemented.
+* CSS `shadow-sm` is absent.
+* Slots are layout accessors rather than eight separate upstream slot classes.
+* CSS container queries and arbitrary class overrides are not implemented.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 

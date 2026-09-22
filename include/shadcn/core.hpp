@@ -12,12 +12,12 @@ inline constexpr auto version = "0.1.0";
 
 /// Button appearances in the pinned New York v4 component.
 enum class Variant { Default, Destructive, Outline, Secondary, Ghost, Link };
-/// Button sizes, including all four icon-only sizes.
+/// Button sizes, including all four sizes for icons.
 enum class ButtonSize { Default, Xs, Sm, Lg, Icon, IconXs, IconSm, IconLg };
 enum class ColorMode { Light, Dark };
 enum class MotionPolicy { Full, Reduced };
 
-/// Dimensions are logical pixels at a 16-pixel CSS rem.
+/// Dimensions use logical pixels, with 16 pixels per CSS rem.
 struct ButtonMetrics {
     double height;
     double padding;
@@ -58,23 +58,23 @@ struct Oklch {
 };
 enum class ValueError { NonFinite, OutOfRange, EmptyRange };
 
-/// Convert OKLCH to sRGB. Out-of-gamut channels are clipped, not CSS gamut-mapped.
+/// Convert OKLCH to sRGB and clip channels outside the gamut. CSS gamut mapping is not implemented.
 [[nodiscard]] std::expected<Rgba, ValueError> to_srgb(Oklch color) noexcept;
 /// Reject NaN, infinity, reversed ranges and values outside the range.
 [[nodiscard]] std::expected<double, ValueError>
 progress_fraction(double value, double minimum, double maximum) noexcept;
-/// Evaluate CSS cubic-bezier timing. x1 and x2 must be in [0, 1].
+/// Evaluate the CSS `cubic-bezier` timing function. x1 and x2 must be in [0, 1].
 class CubicBezier {
 public:
     [[nodiscard]] static std::expected<CubicBezier, ValueError>
     make(double x1, double y1, double x2, double y2) noexcept;
-    /// Clamp finite input to [0, 1]. Non-finite input returns 0.
+    /// Clamp finite input to [0, 1]. NaN and infinity return 0.
     [[nodiscard]] double sample(double progress) const noexcept;
 private:
     CubicBezier(double x1, double y1, double x2, double y2) noexcept;
     double x1_, y1_, x2_, y2_;
 };
-/// Tailwind's default transition curve: cubic-bezier(0.4, 0, 0.2, 1).
+/// Tailwind's default transition curve, `cubic-bezier(0.4, 0, 0.2, 1)`.
 [[nodiscard]] double transition_easing(double progress) noexcept;
 /// Tailwind pulse opacity. One cycle is 2 seconds, with opacity 0.5 halfway.
 [[nodiscard]] double pulse_opacity(double seconds) noexcept;
@@ -89,7 +89,7 @@ enum class Role : std::size_t {
     SidebarAccent, SidebarAccentForeground, SidebarBorder, SidebarRing, Count
 };
 
-/// A value-owned theme. Reading a colour is O(1) and allocates no memory.
+/// A theme that owns its values. Reading a colour is O(1) and allocates no memory.
 class Theme {
 public:
     [[nodiscard]] static Theme neutral(ColorMode mode = ColorMode::Light);

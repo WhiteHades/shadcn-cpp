@@ -2,7 +2,7 @@
 
 Status: draft. Native build, interaction, visual, animation and accessibility checks are unverified.
 
-Decorative horizontal and vertical one-logical-pixel lines.
+Decorative horizontal and vertical lines one logical pixel thick.
 
 ```cpp
 // In the shadcn namespace; parent is a live QWidget*.
@@ -13,9 +13,9 @@ The current separator is decorative. Layout policy gives one logical pixel to it
 
 ## Known differences
 
-- Non-decorative accessible separator semantics are not implemented.
+* Accessible semantics for separators that convey meaning are not implemented.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 

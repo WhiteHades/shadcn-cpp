@@ -2,7 +2,7 @@
 
 Status: draft. Native build, interaction, visual, animation and accessibility checks are unverified.
 
-Qt buddy association, click-to-focus, click-to-toggle and disabled buddy tracking.
+Qt buddy association, focus and toggle actions on click and disabled buddy tracking.
 
 ```cpp
 // In the shadcn namespace; parent is a live QWidget*.
@@ -14,9 +14,9 @@ The buddy is observed through QPointer. A label click focuses it, and activates 
 
 ## Known differences
 
-- Grouped disabled opacity, selection prevention and mnemonic behaviour need reference checks.
+* Grouped disabled opacity, selection prevention and mnemonic behaviour need reference checks.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 

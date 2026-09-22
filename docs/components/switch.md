@@ -2,7 +2,7 @@
 
 Status: draft. Native build, interaction, visual, animation and accessibility checks are unverified.
 
-Default and small tracks, keyboard and pointer activation. Animated thumb, right-to-left layout and reduced motion.
+Default and small tracks, keyboard and pointer activation. Animated thumb, right to left layout and reduced motion.
 
 ```cpp
 // In the shadcn namespace; parent is a live QWidget*.
@@ -12,15 +12,15 @@ autoplay.setSwitchSize(SwitchSize::Sm);
 autoplay.setChecked(true);
 ```
 
-Use inherited toggled for state changes. The intended public use is two-state. Inherited QCheckBox APIs are still available and can request states outside that intended contract.
+Use inherited toggled for state changes. The public interface supports two states. Inherited QCheckBox APIs are still available and can request states outside that intended contract.
 
 ## Known differences
 
-- Qt exposes inherited checkbox accessibility semantics, not a reviewed switch role.
-- CSS shadows are absent.
-- Radix package implementation and platform assistive technology parity remain unreviewed.
+* Qt exposes inherited checkbox accessibility semantics, not a reviewed switch role.
+* CSS shadows are absent.
+* Radix package implementation and platform assistive technology parity remain unreviewed.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 

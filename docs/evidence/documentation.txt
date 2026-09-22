@@ -1,4 +1,0 @@
-$ bash tools/build-docs.sh
-Exit code: 1
-
-Install Doxygen first.

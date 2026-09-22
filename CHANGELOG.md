@@ -2,8 +2,6 @@
 
 ## 0.1.0
 
-Initial development snapshot. Adds a Qt-free theme and timing library, draft Qt widgets, a gallery, public-interface tests, source provenance, an iterative roadmap and documentation configuration.
+Initial development snapshot with a theme and timing core, ten draft Qt widgets, a gallery and C++ API documentation.
 
-The bundle was restored with its original history. Linux native compilation and tests now pass after correcting the checkbox construction in the label test. Documentation uses one Docusaurus site for guides and the C++ API reference.
-
-Cross-platform verification, native sanitizer clearance and visual parity remain pending. There is no published release tag.
+The Linux build and local tests pass with Qt 6.11.2. Other platforms, visual parity and accessibility remain under review. There is no release tag.

@@ -15,11 +15,11 @@ An empty error clears the invalid state and accessible description. QLineEdit me
 
 ## Known differences
 
-- Colour and shadow transitions are absent.
-- HTML file, date and numeric input types are not implemented.
-- Disabled placeholder and selection opacity need reference checks.
+* Colour and shadow transitions are absent.
+* HTML file, date and numeric input types are not implemented.
+* Disabled placeholder and selection opacity need reference checks.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 

@@ -11,12 +11,12 @@ if (!changed) {
 shadcn::install(app, theme, shadcn::MotionPolicy::Reduced);
 ```
 
-The colour setter rejects NaN, infinity and channels outside zero to one. Theme creation uses OKLCH values from the source. The current conversion clips out-of-gamut sRGB channels. Browser CSS can use a different gamut-mapping method, so colour parity remains unverified.
+The colour setter rejects NaN, infinity and channels outside zero to one. Theme creation uses OKLCH values from the source. The current conversion clips outside the sRGB gamut sRGB channels. Browser CSS can use a different gamut mapping method, so colour parity remains unverified.
 
-The reference rem is 16 logical pixels. The neutral radius is 10 pixels. Button dimensions come from their own source variants. The default application font size is 14 logical pixels and the existing font family is retained. Pass a non-positive final argument to `install` to preserve the application font size. Fonts are not bundled. Visual comparisons must use the same font on both sides.
+The reference rem is 16 logical pixels. The neutral radius is 10 pixels. Button dimensions come from their own source variants. The default application font size is 14 logical pixels and the existing font family is retained. Pass a zero or negative final argument to `install` to preserve the application font size. Fonts are not bundled. Visual comparisons must use the same font on both sides.
 
-`install` changes the QApplication style and palette. It must run on the GUI thread. Defer a style replacement until after the current event handler when changing a theme interactively; the gallery demonstrates this with a zero-delay timer.
+`install` changes the QApplication style and palette. It must run on the GUI thread. Defer a style replacement until after the current event handler when changing a theme interactively; the gallery demonstrates this with a timer with zero delay.
 
-Full motion uses a 150 ms default timing curve for the draft button, switch and progress transitions. Skeleton uses a two-second pulse. Reduced motion disables these transitions and the pulse. Hidden skeletons stop animating. The current API requires an explicit motion policy; automatic operating-system preference detection is planned.
+Full motion uses a 150 ms default timing curve for the draft button, switch and progress transitions. Skeleton uses a pulse lasting two seconds. Reduced motion disables these transitions and the pulse. Hidden skeletons stop animating. The current API requires an explicit motion policy; automatic operating system preference detection is planned.
 
 Only the neutral theme and New York v4 profile are implemented as drafts. Chart and sidebar colour roles do not mean that Chart or Sidebar components exist. Arbitrary browser CSS, Tailwind class strings and alternate shadcn profiles are outside the current implementation.

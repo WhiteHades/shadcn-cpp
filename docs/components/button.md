@@ -15,11 +15,11 @@ Use the inherited clicked signal with a receiver context. Button dimensions may 
 
 ## Known differences
 
-- CSS shadows are absent.
-- Native font metrics and icon rendering differ.
-- React asChild composition has no direct C++ equivalent.
+* CSS shadows are absent.
+* Native font metrics and icon rendering differ.
+* React asChild composition has no direct C++ equivalent.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 

@@ -14,9 +14,9 @@ This draft is a static text label. It has no link target or icon API.
 
 ## Known differences
 
-- Link activation, icons, asChild composition, invalid and focus states are not implemented.
+* Link activation, icons, asChild composition, invalid and focus states are not implemented.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 

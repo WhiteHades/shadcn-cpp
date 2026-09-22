@@ -1,2 +1,0 @@
-$ node --check website/docusaurus.config.mjs && node --check website/sidebars.mjs && bash -n tools/publish.sh tools/build-docs.sh
-Exit code: 0

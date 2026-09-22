@@ -6,21 +6,20 @@
   <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-18181b?style=flat-square" />
   <img alt="MIT" src="https://img.shields.io/badge/licence-MIT-18181b?style=flat-square" />
 </p>
-<p align="center"><a href="https://whitehades.github.io/shadcn-cpp/">Documentation</a> · <a href="docs/getting-started.md">Get started</a> · <a href="docs/components/index.md">Components</a> · <a href="docs/roadmap.md">Roadmap</a> · <a href="docs/verification.md">Verification</a></p>
+<p align="center"><a href="https://whitehades.github.io/shadcn-cpp/">Documentation</a> · <a href="docs/getting-started.md">Get started</a> · <a href="docs/components/index.md">Components</a> · <a href="docs/api.md">C++ API</a></p>
 
-**Early development.** The Qt-free core and ten draft native components build and pass their tests on Linux with Qt 6.11.2. Cross-platform verification, visual parity and platform accessibility checks are still pending. This is not a complete shadcn port.
+**Early development.** The core and ten draft components build and pass their tests on Linux with Qt 6.11.2. Other platforms, visual parity and accessibility remain under review.
 
 The first reference is shadcn's New York v4 profile and neutral theme at [`98a1fe6`](https://github.com/shadcn-ui/ui/tree/98a1fe67b439324ddc857f47fbdce056600a4329). Each draft records its source hash and known differences in the [parity ledger](upstream/manifest.json). The application runtime uses C++ and Qt Widgets.
 
 ## Build the gallery
 
-Install a C++23 compiler, CMake 3.25 or later, Ninja and Qt 6.8 or later with Widgets and Test.
+Install a C++23 compiler, CMake 3.25 or later, Ninja and Qt 6.8 or later with Widgets.
 
 ```sh
-cmake --preset dev
-cmake --build --preset dev
-ctest --preset dev
-./build/dev/shadcn_gallery
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/shadcn_gallery
 ```
 
 ## Use a component
@@ -37,8 +36,8 @@ Link `shadcn::widgets`. The [complete example](docs/getting-started.md) includes
 
 ## Status
 
-Drafts cover Button, Card, Input, Badge, Label, Checkbox, Switch, Separator, Progress and Skeleton. The [roadmap](docs/roadmap.md) covers the remaining components, recipes and design profiles. Docusaurus builds the guides and [C++ API reference](docs/api.md) as one documentation site.
+Drafts cover Button, Card, Input, Badge, Label, Checkbox, Switch, Separator, Progress and Skeleton. The [component guides](docs/components/index.md) describe their current scope. The [C++ API guide](docs/api.md) explains how to use them.
 
-Version remains **0.1.0** until the maintainer requests a change. Use commit pins during development.
+Version **0.1.0** is a development snapshot. Pin a commit when using the library.
 
 MIT. Includes adaptations of [shadcn/ui](https://github.com/shadcn-ui/ui), with its [licence retained](LICENSES/shadcn-MIT.txt). Qt has its own licence. This project is independent of shadcn/ui.

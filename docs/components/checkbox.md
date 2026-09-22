@@ -11,15 +11,15 @@ complete.setTristate(true);
 complete.setCheckState(Qt::PartiallyChecked);
 ```
 
-Use inherited state signals. The mixed-state dash is a documented native difference from the inspected indicator.
+Use inherited state signals. The mixed state dash is a documented native difference from the inspected indicator.
 
 ## Known differences
 
-- The mixed-state dash is a deliberate native difference, not an upstream-identical indicator.
-- The check mark is drawn locally, not the upstream Lucide SVG.
-- CSS shadows and transition-shadow are absent.
+* The mixed state dash is a deliberate native difference, not an indicator identical to the upstream one.
+* The check mark is drawn locally, not the upstream Lucide SVG.
+* CSS shadows and `transition-shadow` are absent.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 

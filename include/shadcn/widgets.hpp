@@ -37,11 +37,11 @@ private:
 };
 
 /// Install on the application's GUI thread. Uses the application's font family.
-/// Passing a non-positive fontPixels preserves the application's current font size.
+/// Passing zero or a negative fontPixels preserves the application's current font size.
 void install(QApplication& app, Theme theme = Theme::neutral(),
              MotionPolicy motion = MotionPolicy::Full, int fontPixels = 14);
 
-/// Construct a parent-owned widget and return a borrowed reference.
+/// Construct a widget owned by its parent and return a borrowed reference.
 /// Do not delete the reference or also place it in an owning smart pointer.
 // moc does not need to parse this constrained free-function template.
 #ifndef Q_MOC_RUN
@@ -79,7 +79,7 @@ private:
     QVariantAnimation* hover_;
 };
 
-/// QLineEdit retains native selection, clipboard, undo, password and input-method support.
+/// QLineEdit retains native selection, clipboard, undo, password and input method support.
 /// File, date and number HTML input types need separate native components.
 class Input : public QLineEdit {
     Q_OBJECT
@@ -115,7 +115,7 @@ private:
     Variant variant_ = Variant::Default;
 };
 
-/// Label with a Qt buddy, click-to-focus and click-to-toggle for buttons.
+/// Label that focuses its Qt buddy or toggles a button when clicked.
 class Label : public QLabel {
     Q_OBJECT
 public:
@@ -169,7 +169,7 @@ private:
     QVariantAnimation* transition_;
 };
 
-/// A one-logical-pixel decorative line.
+/// A decorative line one logical pixel thick.
 class Separator : public QFrame {
     Q_OBJECT
 public:

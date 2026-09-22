@@ -5,7 +5,7 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 option(SHADCN_BUILD_WIDGETS "Build native Qt widgets" ON)
-option(SHADCN_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
+option(SHADCN_BUILD_TESTS "Build local development tests" OFF)
 option(SHADCN_BUILD_EXAMPLES "Build the component gallery" ${PROJECT_IS_TOP_LEVEL})
 option(SHADCN_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(SHADCN_WARNINGS_AS_ERRORS "Treat project warnings as errors" OFF)

@@ -2,7 +2,7 @@
 
 Status: draft. Native build, interaction, visual, animation and accessibility checks are unverified.
 
-Two-second opacity pulse with shared accent colour and radius. Animation stops while hidden or when reduced motion is selected.
+Opacity pulse lasting two seconds with shared accent colour and radius. Animation stops while hidden or when reduced motion is selected.
 
 ```cpp
 // In the shadcn namespace; parent is a live QWidget*.
@@ -14,9 +14,9 @@ The placeholder pulses only when visible and full motion is selected. It becomes
 
 ## Known differences
 
-- Browser-to-Qt timing and pixel comparisons have not run.
+* Timing and pixel comparisons between the browser and Qt have not run.
 
-Shared font, gamut-mapping and interpolation differences also apply. See the [parity process](../parity.md).
+Shared font, gamut mapping and interpolation differences also apply. See the [source records](https://github.com/WhiteHades/shadcn-cpp/blob/main/upstream/manifest.json).
 
 ## Source
 
