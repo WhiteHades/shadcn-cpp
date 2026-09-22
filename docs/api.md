@@ -51,7 +51,7 @@ shadcn::install(app, shadcn::Theme::neutral(), shadcn::MotionPolicy::Reduced);
 
 ## Composing a card
 
-The generated `Card` reference documents its complete declaration. Its layouts are borrowed references to card-owned hosts, so child widgets can use ordinary Qt composition:
+The generated `Card` reference lists its members. Its layouts are borrowed references to card-owned hosts, so child widgets can use ordinary Qt composition:
 
 ```cpp
 auto& card = shadcn::make_child<shadcn::Card>(window);

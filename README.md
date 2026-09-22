@@ -6,7 +6,7 @@
   <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-18181b?style=flat-square" />
   <img alt="MIT" src="https://img.shields.io/badge/licence-MIT-18181b?style=flat-square" />
 </p>
-<p align="center"><a href="docs/getting-started.md">Get started</a> · <a href="docs/components/index.md">Components</a> · <a href="docs/roadmap.md">Roadmap</a> · <a href="docs/verification.md">Verification</a></p>
+<p align="center"><a href="https://whitehades.github.io/shadcn-cpp/">Documentation</a> · <a href="docs/getting-started.md">Get started</a> · <a href="docs/components/index.md">Components</a> · <a href="docs/roadmap.md">Roadmap</a> · <a href="docs/verification.md">Verification</a></p>
 
 **Early development.** The Qt-free core and ten draft native components build and pass their tests on Linux with Qt 6.11.2. Cross-platform verification, visual parity and platform accessibility checks are still pending. This is not a complete shadcn port.
 

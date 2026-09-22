@@ -1,9 +1,9 @@
 name: Build documentation
 on:
   push:
-    paths: ['docs/**', 'website/**', 'include/**', 'tools/**', 'upstream/**', 'VERSION', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'website/**', 'include/**', 'tools/**', 'upstream/**', 'CMakeLists.txt', 'cmake/**', 'VERSION', '.github/workflows/docs.yml']
   pull_request:
-    paths: ['docs/**', 'website/**', 'include/**', 'tools/**', 'upstream/**', 'VERSION', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'website/**', 'include/**', 'tools/**', 'upstream/**', 'CMakeLists.txt', 'cmake/**', 'VERSION', '.github/workflows/docs.yml']
   workflow_dispatch:
 permissions:
   contents: read
