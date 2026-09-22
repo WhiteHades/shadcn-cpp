@@ -48,6 +48,13 @@
       "command": "bash tools/build-docs.sh",
       "exit_code": 1,
       "evidence": "docs/evidence/documentation.txt"
+    },
+    {
+      "check": "fresh-source-archive",
+      "source_commit": "e895e84",
+      "command": "git archive HEAD extracted into a fresh directory; core configure/build/assertions; package install and external consumer configure/build/test",
+      "exit_code": 0,
+      "evidence": "docs/evidence/archive-smoke.txt"
     }
   ],
   "github_publication": "not performed; no write action exposed by the connected GitHub tool",

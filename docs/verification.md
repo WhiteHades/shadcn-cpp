@@ -12,6 +12,7 @@ This is the first local development snapshot, not a published release. The GitHu
 | Qt-free unit executable | Passed, 1043 assertions including a 1001-point timing sweep. | [Output](evidence/core.txt) |
 | AddressSanitizer and UndefinedBehaviorSanitizer core build | Passed, with sanitizer recovery disabled. | [Sanitizer run](evidence/core-asan.txt) |
 | Installed CMake core package and separate consumer | Passed. | [Consumer run](evidence/installed-consumer.txt) |
+| Fresh source archive, core build and installed consumer | Passed without copying previous build outputs. | [Archive smoke test](evidence/archive-smoke.txt) |
 | Provenance, path-safety and evidence-gate tools | Seven Python tests passed. | [Tool tests](evidence/tools.txt) |
 | Version, catalogue and manifest consistency | Passed for 62 registry entries and 10 draft component records. | [Checker output](evidence/tools.txt) |
 | Documentation JavaScript and shell script syntax | Passed. This is not a documentation build or a publishing test. | [Syntax checks](evidence/syntax.txt) |
