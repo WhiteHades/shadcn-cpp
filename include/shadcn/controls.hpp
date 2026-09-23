@@ -150,6 +150,7 @@ private:
 
 /// A keyboard and pointer controlled slider. One value makes a single thumb.
 /// Two values make a range with two thumbs, matching the upstream default shape.
+/// Moving a thumb past its neighbours pushes them, matching Base UI's default.
 class Slider : public QWidget {
     Q_OBJECT
     Q_PROPERTY(double minimum READ minimum WRITE setMinimum)

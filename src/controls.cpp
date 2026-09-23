@@ -677,11 +677,11 @@ public:
     QVariant currentValue() const override { return isValid() ? QVariant(slider_->values_[index_]) : QVariant{}; }
     QVariant minimumValue() const override {
         if (!isValid()) return {};
-        return index_ ? slider_->values_[index_ - 1] : slider_->minimum_;
+        return slider_->minimum_;
     }
     QVariant maximumValue() const override {
         if (!isValid()) return {};
-        return index_ + 1 < slider_->values_.size() ? slider_->values_[index_ + 1] : slider_->maximum_;
+        return slider_->maximum_;
     }
     QVariant minimumStepSize() const override { return slider_ ? QVariant(slider_->singleStep_) : QVariant{}; }
     void setCurrentValue(const QVariant& value) override {
@@ -821,9 +821,11 @@ void Slider::updateAccessibleValue() {
                  QString::number(values_.size()), QString::number(minimum_),
                  QString::number(maximum_)));
     if (auto* accessible = QAccessible::queryAccessibleInterface(this)) {
-        if (auto* thumb = accessible->child(index)) {
-            QAccessibleValueChangeEvent change(thumb, values_.at(index));
-            QAccessible::updateAccessibility(&change);
+        for (int i = 0; i < values_.size(); ++i) {
+            if (auto* thumb = accessible->child(i)) {
+                QAccessibleValueChangeEvent change(thumb, values_.at(i));
+                QAccessible::updateAccessibility(&change);
+            }
         }
     }
 }
@@ -877,12 +879,12 @@ int Slider::thumbAt(const QPointF& point) const {
 }
 
 void Slider::setValueAt(int index, double value) {
-    if (index < 0 || index >= values_.size()) return;
+    if (index < 0 || index >= values_.size() || !std::isfinite(value)) return;
     value = std::clamp(value, minimum_, maximum_);
-    if (index > 0) value = std::max(value, values_[index - 1]);
-    if (index + 1 < values_.size()) value = std::min(value, values_[index + 1]);
     auto next = values_;
     next[index] = value;
+    for (int i = index - 1; i >= 0; --i) next[i] = std::min(next[i], value);
+    for (auto i = index + 1; i < next.size(); ++i) next[i] = std::max(next[i], value);
     setValues(next);
 }
 
