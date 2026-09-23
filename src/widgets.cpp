@@ -11,6 +11,7 @@
 #include <QEasingCurve>
 #include <QFocusFrame>
 #include <QFontMetrics>
+#include <QFontDatabase>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -26,15 +27,20 @@
 #include <cmath>
 #include <stdexcept>
 
+static void initialiseFonts() { Q_INIT_RESOURCE(fonts); }
+
 namespace shadcn {
 namespace {
 const Theme& themeFor(const QWidget& widget) {
     if (const auto* current = qobject_cast<const Style*>(widget.style())) return current->theme();
+    if (const auto* current = qobject_cast<const Style*>(QApplication::style())) return current->theme();
     static const auto fallback = Theme::neutral();
     return fallback;
 }
 bool reduced(const QWidget& widget) {
     if (const auto* current = qobject_cast<const Style*>(widget.style()))
+        return current->motion() == MotionPolicy::Reduced;
+    if (const auto* current = qobject_cast<const Style*>(QApplication::style()))
         return current->motion() == MotionPolicy::Reduced;
     return false;
 }
@@ -59,7 +65,7 @@ QColor blend(const QColor& a, const QColor& b, double t) {
 }
 double radiusFor(const QWidget& widget) {
     const auto fixed = widget.property("shadcnRadius");
-    return fixed.isValid() ? fixed.toDouble() : std::max(0.0, themeFor(widget).radius() - 2);
+    return fixed.isValid() ? fixed.toDouble() : themeFor(widget).radius();
 }
 bool focusVisible(const QWidget& widget) {
     return widget.hasFocus() && widget.property("shadcnFocusVisible").toBool();
@@ -80,11 +86,12 @@ Appearance appearance(const Theme& theme, Variant variant, double hover, bool ba
     const QColor clear(Qt::transparent);
     switch (variant) {
     case Variant::Default:
-        return {alpha(c(Role::Primary), 1 - .1 * hover), c(Role::PrimaryForeground), clear};
+        return {alpha(c(Role::Primary), 1 - .2 * hover), c(Role::PrimaryForeground), clear};
     case Variant::Destructive:
-        return {alpha(c(Role::Destructive), dark ? .6 : 1 - .1 * hover), QColor(Qt::white), clear};
+        return {alpha(c(Role::Destructive), (dark ? .2 : .1) + .1 * hover), c(Role::Destructive), clear};
     case Variant::Secondary:
-        return {alpha(c(Role::Secondary), 1 - (badge ? .1 : .2) * hover), c(Role::SecondaryForeground), clear};
+        return {badge ? alpha(c(Role::Secondary), 1 - .2 * hover)
+                      : blend(c(Role::Secondary), c(Role::Foreground), .05 * hover), c(Role::SecondaryForeground), clear};
     case Variant::Outline:
         if (badge) return {clear, c(Role::Foreground), c(Role::Border)};
         return {dark ? alpha(c(Role::Input), .3 + .2 * hover)
@@ -187,9 +194,9 @@ QFont buttonFont(const QWidget& widget, ButtonSize size) {
     auto font = widget.font();
     font.setWeight(QFont::Medium);
     const auto metrics = button_metrics(size);
-    if (metrics.fontSize == 12) {
-        if (font.pixelSize() > 0) font.setPixelSize(std::max(1, font.pixelSize() - 2));
-        else font.setPointSizeF(std::max(1.0, font.pointSizeF() * 12 / 14));
+    if (metrics.fontSize != 14) {
+        if (font.pixelSize() > 0) font.setPixelSize(std::max(1, qRound(font.pixelSize() * metrics.fontSize / 14)));
+        else font.setPointSizeF(std::max(1.0, font.pointSizeF() * metrics.fontSize / 14));
     }
     return font;
 }
@@ -229,7 +236,15 @@ void install(QApplication& app, Theme theme, MotionPolicy motion, int fontPixels
     app.setStyle(new Style(std::move(theme), motion));
     app.setPalette(palette);
     if (fontPixels > 0) {
+        static const int fontId = [] {
+            initialiseFonts();
+            return QFontDatabase::addApplicationFont(QStringLiteral(":/shadcn/Inter.ttf"));
+        }();
         auto font = app.font();
+        if (fontId >= 0) {
+            const auto families = QFontDatabase::applicationFontFamilies(fontId);
+            if (!families.isEmpty()) font.setFamily(families.first());
+        }
         font.setPixelSize(fontPixels);
         app.setFont(font);
     }
@@ -268,13 +283,13 @@ void Button::setInvalid(bool invalid) {
 QSize Button::sizeHint() const {
     const auto m = button_metrics(size_);
     const QFontMetrics fm(buttonFont(*this, size_));
-    const auto height = std::max(static_cast<int>(m.height), fm.height() + 8);
+    const auto height = std::max(static_cast<int>(m.height), fm.height() + 4);
     if (m.iconOnly) return {height, height};
     const auto hasIcon = !icon().isNull();
-    const auto padding = hasIcon ? m.iconPadding : m.padding;
+    const auto padding = hasIcon ? m.iconPadding + m.padding : m.padding * 2;
     const auto textWidth = fm.size(Qt::TextShowMnemonic, text()).width();
     const auto content = textWidth + (hasIcon ? static_cast<int>(m.iconSize + (text().isEmpty() ? 0 : m.gap)) : 0);
-    return {content + static_cast<int>(padding * 2), height};
+    return {content + static_cast<int>(padding), height};
 }
 QSize Button::minimumSizeHint() const { return sizeHint(); }
 void Button::updateHover() {
@@ -299,12 +314,16 @@ void Button::keyPressEvent(QKeyEvent* event) {
 }
 void Button::paintEvent(QPaintEvent*) {
     QPainter painter(this);
+    if (isDown() && !menu()) painter.translate(0, 1);
     const auto& theme = themeFor(*this);
     auto look = appearance(theme, variant_, hoverAmount_);
     if (invalid_) look.border = color(theme, Role::Destructive);
     else if (focusVisible(*this)) look.border = color(theme, Role::Ring);
     if (!isEnabled()) painter.setOpacity(.5);
-    rounded(painter, QRectF(rect()).adjusted(.5, .5, -.5, -.5), radiusFor(*this), look.fill, look.border);
+    const auto radius = size_ == ButtonSize::Xs || size_ == ButtonSize::Sm ||
+                        size_ == ButtonSize::IconXs || size_ == ButtonSize::IconSm
+        ? theme.radius() * .8 : radiusFor(*this);
+    rounded(painter, QRectF(rect()).adjusted(.5, .5, -.5, -.5), radius, look.fill, look.border);
     const auto m = button_metrics(size_);
     const auto font = buttonFont(*this, size_);
     painter.setFont(font);
@@ -334,7 +353,8 @@ void Button::paintEvent(QPaintEvent*) {
 
 Input::Input(QWidget* parent) : QLineEdit(parent) {
     setFrame(false);
-    setTextMargins(12, 4, 12, 4);
+    setStyleSheet("QLineEdit { background: transparent; border: none; }");
+    setTextMargins(10, 4, 10, 4);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     updatePalette();
     new FocusRing(*this, true);
@@ -361,7 +381,7 @@ void Input::setError(const QString& message) {
     QAccessibleEvent event(this, QAccessible::DescriptionChanged);
     QAccessible::updateAccessibility(&event);
 }
-QSize Input::sizeHint() const { return {240, std::max(36, fontMetrics().height() + 10)}; }
+QSize Input::sizeHint() const { return {240, std::max(32, fontMetrics().height() + 10)}; }
 QSize Input::minimumSizeHint() const { return {24, sizeHint().height()}; }
 void Input::changeEvent(QEvent* event) {
     QLineEdit::changeEvent(event);
@@ -369,7 +389,7 @@ void Input::changeEvent(QEvent* event) {
     if (event->type() == QEvent::FontChange) updateGeometry();
 }
 void Input::paintEvent(QPaintEvent* event) {
-    {
+    if (!property("shadcnEmbedded").toBool()) {
         QPainter painter(this);
         const auto& theme = themeFor(*this);
         auto border = color(theme, invalid_ ? Role::Destructive : hasFocus() ? Role::Ring : Role::Input);
@@ -387,7 +407,7 @@ Badge::Badge(const QString& text, QWidget* parent) : QLabel(text, parent) {
     auto f = font(); f.setPixelSize(12); f.setWeight(QFont::Medium); setFont(f);
 }
 void Badge::setVariant(Variant variant) { variant_ = variant; update(); }
-QSize Badge::sizeHint() const { return {fontMetrics().horizontalAdvance(text()) + 18, fontMetrics().height() + 6}; }
+QSize Badge::sizeHint() const { return {fontMetrics().horizontalAdvance(text()) + 18, std::max(20, fontMetrics().height() + 2)}; }
 QSize Badge::minimumSizeHint() const { return sizeHint(); }
 void Badge::paintEvent(QPaintEvent*) {
     QPainter painter(this);
@@ -476,7 +496,8 @@ void Checkbox::paintEvent(QPaintEvent*) {
     if (!text().isEmpty()) {
         painter.setPen(color(theme, Role::Foreground));
         painter.drawText(rtl ? rect().adjusted(0, 0, -24, 0) : rect().adjusted(24, 0, 0, 0),
-                         Qt::AlignVCenter | (rtl ? Qt::AlignRight : Qt::AlignLeft) | Qt::TextShowMnemonic, text());
+                         static_cast<int>(Qt::AlignVCenter | (rtl ? Qt::AlignRight : Qt::AlignLeft) |
+                                          Qt::TextShowMnemonic), text());
     }
 }
 
@@ -555,8 +576,8 @@ Progress::Progress(QWidget* parent) : QProgressBar(parent), transition_(new QVar
     connect(this, &QProgressBar::valueChanged, this, [this] { updateFraction(); });
     QProgressBar::setValue(0);
 }
-QSize Progress::sizeHint() const { return {160, 8}; }
-QSize Progress::minimumSizeHint() const { return {0, 8}; }
+QSize Progress::sizeHint() const { return {160, 4}; }
+QSize Progress::minimumSizeHint() const { return {0, 4}; }
 void Progress::setRange(int minimum, int maximum) { QProgressBar::setRange(minimum, maximum); updateFraction(); }
 void Progress::setMinimum(int minimum) { QProgressBar::setMinimum(minimum); updateFraction(); }
 void Progress::setMaximum(int maximum) { QProgressBar::setMaximum(maximum); updateFraction(); }
@@ -573,7 +594,7 @@ void Progress::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     const auto& theme = themeFor(*this);
     const auto bounds = QRectF(rect());
-    rounded(painter, bounds, height() / 2.0, alpha(color(theme, Role::Primary), .2));
+    rounded(painter, bounds, height() / 2.0, color(theme, Role::Muted));
     QPainterPath clip; clip.addRoundedRect(bounds, height() / 2.0, height() / 2.0);
     painter.setClipPath(clip);
     const auto actual = progress_fraction(value(), minimum(), maximum()).value_or(0);
@@ -611,19 +632,19 @@ bool Skeleton::event(QEvent* event) {
 }
 void Skeleton::paintEvent(QPaintEvent*) {
     QPainter painter(this); painter.setOpacity(opacity_);
-    rounded(painter, QRectF(rect()), radiusFor(*this), color(themeFor(*this), Role::Accent));
+    rounded(painter, QRectF(rect()), themeFor(*this).radius() * .8, color(themeFor(*this), Role::Muted));
 }
 
 Card::Card(QWidget* parent) : QFrame(parent) {
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
     auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 24, 0, 24); outer->setSpacing(24);
+    outer->setContentsMargins(0, 16, 0, 16); outer->setSpacing(16);
     header_ = new QWidget(this);
     auto* headerLayout = new QGridLayout(header_);
-    headerLayout->setContentsMargins(24, 0, 24, 0); headerLayout->setSpacing(8);
+    headerLayout->setContentsMargins(16, 0, 16, 0); headerLayout->setSpacing(4);
     headerLayout->setColumnStretch(0, 1);
     title_ = new QLabel(header_); title_->setTextFormat(Qt::PlainText); title_->setWordWrap(true);
-    auto titleFont = font(); titleFont.setWeight(QFont::DemiBold); titleFont.setPixelSize(16); title_->setFont(titleFont);
+    auto titleFont = font(); titleFont.setWeight(QFont::Medium); titleFont.setPixelSize(16); title_->setFont(titleFont);
     description_ = new QLabel(header_); description_->setTextFormat(Qt::PlainText); description_->setWordWrap(true);
     actionHost_ = new QWidget(header_); action_ = new QVBoxLayout(actionHost_); action_->setContentsMargins(0,0,0,0);
     headerLayout->addWidget(title_, 0, 0); headerLayout->addWidget(description_, 1, 0);
@@ -631,10 +652,10 @@ Card::Card(QWidget* parent) : QFrame(parent) {
     actionHost_->hide();
     outer->addWidget(header_); header_->hide();
     contentHost_ = new QWidget(this); content_ = new QVBoxLayout(contentHost_);
-    content_->setContentsMargins(24,0,24,0); content_->setSpacing(12);
+    content_->setContentsMargins(16,0,16,0); content_->setSpacing(12);
     outer->addWidget(contentHost_); contentHost_->hide();
     footerHost_ = new QWidget(this); footer_ = new QHBoxLayout(footerHost_);
-    footer_->setContentsMargins(24,0,24,0); footer_->setSpacing(8);
+    footer_->setContentsMargins(16,16,16,16); footer_->setSpacing(8);
     outer->addWidget(footerHost_); footerHost_->hide();
     updatePalette();
 }
@@ -652,7 +673,7 @@ void Card::updateHeader() {
 void Card::setTitle(const QString& title) { title_->setText(title); updateHeader(); }
 void Card::setDescription(const QString& description) { description_->setText(description); updateHeader(); }
 QVBoxLayout& Card::content() { contentHost_->show(); return *content_; }
-QHBoxLayout& Card::footer() { footerHost_->show(); return *footer_; }
+QHBoxLayout& Card::footer() { footerHost_->show(); layout()->setContentsMargins(0,16,0,0); return *footer_; }
 QVBoxLayout& Card::action() { actionHost_->show(); header_->show(); return *action_; }
 void Card::changeEvent(QEvent* event) {
     QFrame::changeEvent(event);
@@ -661,7 +682,15 @@ void Card::changeEvent(QEvent* event) {
 void Card::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     const auto& theme = themeFor(*this);
-    rounded(painter, QRectF(rect()).adjusted(.5,.5,-.5,-.5), theme.radius() + 4,
+    rounded(painter, QRectF(rect()).adjusted(.5,.5,-.5,-.5), theme.radius() * 1.4,
             color(theme, Role::Card), color(theme, Role::Border));
+    if (!footerHost_->isHidden()) {
+        QPainterPath clip;
+        clip.addRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5), theme.radius()*1.4, theme.radius()*1.4);
+        painter.setClipPath(clip);
+        painter.fillRect(footerHost_->geometry(), alpha(color(theme, Role::Muted), .5));
+        painter.setPen(color(theme,Role::Border));
+        painter.drawLine(0,footerHost_->y(),width(),footerHost_->y());
+    }
 }
 } // namespace shadcn

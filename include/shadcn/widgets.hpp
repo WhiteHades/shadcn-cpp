@@ -36,7 +36,7 @@ private:
     MotionPolicy motion_;
 };
 
-/// Install on the application's GUI thread. Uses the application's font family.
+/// Install the theme and bundled Inter font on the application's GUI thread.
 /// Passing zero or a negative fontPixels preserves the application's current font size.
 void install(QApplication& app, Theme theme = Theme::neutral(),
              MotionPolicy motion = MotionPolicy::Full, int fontPixels = 14);
