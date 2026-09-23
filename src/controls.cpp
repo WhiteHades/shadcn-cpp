@@ -162,8 +162,16 @@ void Textarea::changeEvent(QEvent* event) {
         updatePalette();
 }
 
-void Textarea::paintEvent(QPaintEvent* event) {
-    QPlainTextEdit::paintEvent(event);
+bool Textarea::event(QEvent* event) {
+    // QPlainTextEdit paints text on its viewport. The surrounding frame must
+    // be painted during the outer widget's own paint event.
+    if (event->type() != QEvent::Paint) {
+        const bool handled = QPlainTextEdit::event(event);
+        if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)
+            update();
+        return handled;
+    }
+    if (property("shadcnEmbedded").toBool()) return true;
     QPainter painter(this);
     const auto fill = themeFor(*this).mode() == ColorMode::Dark
         ? withAlpha(colour(*this, Role::Input), .3) : QColor(Qt::transparent);
@@ -171,6 +179,7 @@ void Textarea::paintEvent(QPaintEvent* event) {
             borderFor(*this, invalid_));
     if (isEnabled()) paintFocus(painter, *this, QRectF(rect()));
     if (!isEnabled()) painter.fillRect(rect(), withAlpha(colour(*this, Role::Background), .18));
+    return true;
 }
 
 Toggle::Toggle(const QString& text, QWidget* parent) : QPushButton(text, parent) {
