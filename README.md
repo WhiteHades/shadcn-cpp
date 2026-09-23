@@ -13,7 +13,7 @@
 </p>
 <p align="center"><a href="https://whitehades.github.io/shadcn-cpp/">Documentation</a> · <a href="https://whitehades.github.io/shadcn-cpp/components">Components</a> · <a href="https://whitehades.github.io/shadcn-cpp/api">C++ API</a></p>
 
-The design and motion of shadcn, built with native C++ and Qt Widgets. Small APIs, shared themes and ordinary Qt ownership. Builds use C++26 where supported, with C++23 as the baseline.
+The design and motion of shadcn, built with native C++ and Qt Widgets. Small APIs, shared themes and ordinary Qt ownership. C++26 where supported, with C++23 fallbacks.
 
 <p align="center">
   <picture>

@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QListWidget>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -94,6 +95,11 @@ int main(int argc, char** argv) {
     }
     window->setWindowTitle("shadcn-cpp");
 #ifdef Q_OS_WASM
+    auto* viewport = new QScrollArea;
+    viewport->setFrameShape(QFrame::NoFrame);
+    viewport->setWidgetResizable(true);
+    viewport->setWidget(window);
+    window = viewport;
     window->showFullScreen();
     window->setFocusPolicy(Qt::ClickFocus);
     window->setFocus(Qt::MouseFocusReason);
