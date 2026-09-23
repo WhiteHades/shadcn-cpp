@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/shadcn">
+    <file>Inter.ttf</file>
+  </qresource>
+</RCC>
