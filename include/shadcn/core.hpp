@@ -31,15 +31,15 @@ struct ButtonMetrics {
 [[nodiscard]] constexpr ButtonMetrics button_metrics(ButtonSize size) noexcept {
     switch (size) {
     case ButtonSize::Xs: return {24, 8, 6, 4, 12, 12, false};
-    case ButtonSize::Sm: return {32, 12, 10, 6, 16, 14, false};
-    case ButtonSize::Lg: return {40, 24, 16, 8, 16, 14, false};
-    case ButtonSize::Icon: return {36, 0, 0, 0, 16, 14, true};
+    case ButtonSize::Sm: return {28, 10, 6, 4, 14, 12.8, false};
+    case ButtonSize::Lg: return {36, 10, 8, 6, 16, 14, false};
+    case ButtonSize::Icon: return {32, 0, 0, 0, 16, 14, true};
     case ButtonSize::IconXs: return {24, 0, 0, 0, 12, 12, true};
-    case ButtonSize::IconSm: return {32, 0, 0, 0, 16, 14, true};
-    case ButtonSize::IconLg: return {40, 0, 0, 0, 16, 14, true};
-    case ButtonSize::Default: return {36, 16, 12, 8, 16, 14, false};
+    case ButtonSize::IconSm: return {28, 0, 0, 0, 16, 14, true};
+    case ButtonSize::IconLg: return {36, 0, 0, 0, 16, 14, true};
+    case ButtonSize::Default: return {32, 10, 8, 6, 16, 14, false};
     }
-    return {36, 16, 12, 8, 16, 14, false};
+    return {32, 10, 8, 6, 16, 14, false};
 }
 
 struct Rgba {

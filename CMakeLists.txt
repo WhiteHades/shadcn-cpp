@@ -42,9 +42,9 @@ set(shadcn_targets shadcn_core)
 
 if(SHADCN_BUILD_WIDGETS)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets)
-    add_library(shadcn_widgets STATIC src/widgets.cpp include/shadcn/widgets.hpp)
+    add_library(shadcn_widgets STATIC src/widgets.cpp include/shadcn/widgets.hpp assets/fonts/fonts.qrc)
     add_library(shadcn::widgets ALIAS shadcn_widgets)
-    set_target_properties(shadcn_widgets PROPERTIES AUTOMOC ON EXPORT_NAME widgets)
+    set_target_properties(shadcn_widgets PROPERTIES AUTOMOC ON AUTORCC ON EXPORT_NAME widgets)
     shadcn_target(shadcn_widgets)
     target_link_libraries(shadcn_widgets PUBLIC shadcn::core Qt6::Widgets)
     list(APPEND shadcn_targets shadcn_widgets)
@@ -87,4 +87,4 @@ write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/shadcnConfigVersion
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/shadcnConfig.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/shadcnConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shadcn)
-install(FILES LICENSE LICENSES/shadcn-MIT.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/shadcn-cpp)
+install(FILES LICENSE LICENSES/shadcn-MIT.txt LICENSES/Inter-OFL.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/shadcn-cpp)
