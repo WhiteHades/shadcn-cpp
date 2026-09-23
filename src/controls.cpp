@@ -367,6 +367,10 @@ bool ToggleGroup::eventFilter(QObject* watched, QEvent* event) {
             event->accept();
             return true;
         }
+        if (key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down) {
+            event->ignore();
+            return true;
+        }
     }
     return QWidget::eventFilter(watched, event);
 }
