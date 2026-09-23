@@ -17,6 +17,7 @@
 #include <QToolButton>
 #include <QVector>
 #include <QStringList>
+#include <utility>
 
 class QBoxLayout;
 class QHBoxLayout;
@@ -106,6 +107,7 @@ private:
     QBoxLayout* layout_;
     QList<QPointer<Toggle>> toggles_;
     QHash<Toggle*, QString> values_;
+    QHash<Toggle*, std::pair<QMetaObject::Connection, QMetaObject::Connection>> connections_;
     Qt::Orientation orientation_;
     ToggleGroupMode mode_ = ToggleGroupMode::Single;
     bool focusEntered_ = false;
@@ -142,6 +144,7 @@ private:
     QButtonGroup* buttons_;
     QList<QPointer<RadioGroupItem>> items_;
     QHash<RadioGroupItem*, QString> values_;
+    QHash<RadioGroupItem*, std::pair<QMetaObject::Connection, QMetaObject::Connection>> connections_;
 };
 
 /// A keyboard and pointer controlled slider. One value makes a single thumb.

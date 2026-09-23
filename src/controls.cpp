@@ -270,7 +270,8 @@ void ToggleGroup::addToggle(Toggle& toggle, const QString& value) {
     values_.insert(&toggle, value.isEmpty() ? toggle.text() : value);
     toggles_.append(QPointer<Toggle>(&toggle));
     toggle.installEventFilter(this);
-    connect(&toggle, &QObject::destroyed, this, [this, key = &toggle](QObject* destroyed) {
+    const auto destroyedConnection = connect(&toggle, &QObject::destroyed, this, [this, key = &toggle](QObject* destroyed) {
+        connections_.remove(key);
         values_.remove(key);
         toggles_.removeIf([destroyed](const auto& item) {
             return QPointer<QObject>(item).data() == destroyed;
@@ -278,9 +279,10 @@ void ToggleGroup::addToggle(Toggle& toggle, const QString& value) {
         updateTabStop();
     });
     const QPointer<Toggle> observed(&toggle);
-    connect(&toggle, &QAbstractButton::toggled, this, [this, observed](bool) {
+    const auto toggledConnection = connect(&toggle, &QAbstractButton::toggled, this, [this, observed](bool) {
         if (observed) onToggleChanged(observed.data());
     });
+    connections_.insert(&toggle, {toggledConnection, destroyedConnection});
     if (mode_ == ToggleGroupMode::Single && toggle.isChecked()) {
         for (const auto& other : toggles_) {
             if (other && other != &toggle) other->setChecked(false);
@@ -291,6 +293,9 @@ void ToggleGroup::addToggle(Toggle& toggle, const QString& value) {
 
 void ToggleGroup::removeToggle(Toggle& toggle) {
     if (!toggles_.contains(&toggle)) return;
+    const auto connections = connections_.take(&toggle);
+    disconnect(connections.first);
+    disconnect(connections.second);
     layout_->removeWidget(&toggle);
     values_.remove(&toggle);
     toggles_.removeAll(QPointer<Toggle>(&toggle));
@@ -505,7 +510,8 @@ void RadioGroup::addItem(RadioGroupItem& item, const QString& value) {
     values_.insert(&item, itemValue);
     items_.append(QPointer<RadioGroupItem>(&item));
     item.installEventFilter(this);
-    connect(&item, &QObject::destroyed, this, [this, key = &item](QObject* destroyed) {
+    const auto destroyedConnection = connect(&item, &QObject::destroyed, this, [this, key = &item](QObject* destroyed) {
+        connections_.remove(key);
         values_.remove(key);
         items_.removeIf([destroyed](const auto& observed) {
             return QPointer<QObject>(observed).data() == destroyed;
@@ -514,16 +520,20 @@ void RadioGroup::addItem(RadioGroupItem& item, const QString& value) {
     });
     buttons_->addButton(&item, static_cast<int>(buttons_->buttons().size()));
     const QPointer<RadioGroupItem> observed(&item);
-    connect(&item, &QAbstractButton::toggled, this, [this, observed](bool checked) {
+    const auto toggledConnection = connect(&item, &QAbstractButton::toggled, this, [this, observed](bool checked) {
         if (!observed || !items_.contains(observed)) return;
         updateTabStop();
         if (checked) emit valueChanged(values_.value(observed.data(), observed->text()));
     });
+    connections_.insert(&item, {toggledConnection, destroyedConnection});
     updateTabStop();
 }
 
 void RadioGroup::removeItem(RadioGroupItem& item) {
     if (!items_.contains(&item)) return;
+    const auto connections = connections_.take(&item);
+    disconnect(connections.first);
+    disconnect(connections.second);
     layout_->removeWidget(&item);
     buttons_->removeButton(&item);
     values_.remove(&item);
