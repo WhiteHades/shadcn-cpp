@@ -599,8 +599,24 @@ QString RadioGroup::checkedValue() const {
 }
 
 void RadioGroup::setCheckedValue(const QString& value) {
+    RadioGroupItem* target = nullptr;
     for (const auto& item : items_)
-        if (item) item->setChecked(values_.value(item.data(), item->text()) == value);
+        if (item && values_.value(item.data(), item->text()) == value) target = item;
+    if (target) {
+        buttons_->setExclusive(true);
+        target->setChecked(true);
+        return;
+    }
+    auto* selected = buttons_->checkedButton();
+    if (!selected) return;
+    const QPointer<RadioGroup> alive(this);
+    buttons_->setExclusive(false);
+    selected->setChecked(false);
+    if (!alive) return;
+    buttons_->setExclusive(true);
+    updateTabStop();
+    // A toggled callback may already have selected another item.
+    if (checkedValue().isEmpty()) emit valueChanged({});
 }
 
 class AccessibleSliderThumb final : public QAccessibleInterface,
