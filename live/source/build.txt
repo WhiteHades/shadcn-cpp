@@ -1,0 +1,49 @@
+Build the live C++ preview
+
+The gallery source retains its MIT licence. The combined WebAssembly preview
+uses Qt's GPLv3 platform plugin and is distributed under GPLv3.
+
+Install CMake, Ninja, a host Qt 6.11.2 development installation and
+Emscripten 4.0.7. No account or private source is required.
+Emscripten installation: https://emscripten.org/docs/getting_started/downloads.html
+
+1. Activate Emscripten:
+   ./emsdk install 4.0.7
+   ./emsdk activate 4.0.7
+   source ./emsdk_env.sh
+
+2. Extract qtbase-everywhere-src-6.11.2.tar.xz. Its .tag is
+   ef55f427f2c8b410d34f8a7681020a3000cf6866, matching the distributed SDK.
+   Configure and build it in a separate directory:
+
+   mkdir qt-build
+   cd qt-build
+   ../qtbase-everywhere-src-6.11.2/configure \
+     -qt-host-path /path/to/host-qt-6.11.2 \
+     -platform wasm-emscripten -prefix /path/to/qt-wasm \
+     -release -static -no-feature-thread -nomake examples -nomake tests
+   cmake --build . --parallel 3
+   cmake --install .
+
+   The official SDK configuration is also supplied as config_qtbase.opt
+   and config_qtbase.summary. The source revision matches; binary byte
+   reproducibility across host compilers is not claimed.
+
+3. Extract gallery-source.tar.xz into a new directory. From that directory:
+
+   cmake -S . -B build -G Ninja \
+     -DCMAKE_TOOLCHAIN_FILE=/path/to/qt-wasm/lib/cmake/Qt6/qt.toolchain.cmake \
+     -DQT_HOST_PATH=/path/to/host-qt-6.11.2 \
+     -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=23 \
+     -DSHADCN_BUILD_TESTS=OFF -DSHADCN_BUILD_EXAMPLES=ON
+   cmake --build build --parallel 3
+
+4. Serve the generated shadcn_gallery.html, shadcn_gallery.js,
+   shadcn_gallery.wasm and qtloader.js with a static web server.
+   The documentation's HTML host is available at ../index.html.
+   It selects the component and theme through command line arguments.
+   The WebAssembly build uses the same component and gallery C++ sources.
+
+The SDK build used Emscripten 4.0.7. Runtime source is available at:
+https://github.com/emscripten-core/emscripten/tree/8dc91db45bf96c174531006839472a3924d105aa
+Runtime licences are supplied in ../licenses/.
