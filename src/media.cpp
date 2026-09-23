@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include <shadcn/media.hpp>
+#include "video_surface.hpp"
 
 #include <QActionGroup>
 #include <QApplication>
@@ -18,7 +19,6 @@
 #include <QMenu>
 #include <QShortcut>
 #include <QSignalBlocker>
-#include <QVideoWidget>
 #include <algorithm>
 
 namespace shadcn {
@@ -112,15 +112,16 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     idle_(new QTimer(this)), opacity_(new QGraphicsOpacityEffect(controls_)),
     fade_(new QPropertyAnimation(opacity_, "opacity", this)),
     player_(new QMediaPlayer(this)), audio_(new QAudioOutput(this)),
-    video_(new QVideoWidget(this)), play_(new Button(tr("Play"), this)),
+    video_(new detail::VideoSurface(this)), play_(new Button(tr("Play"), this)),
     mute_(new Button(tr("Mute"), this)), open_(new Button(tr("Open video"), this)),
     fullscreen_(new Button(tr("Fullscreen"), this)), timeline_(new Slider(this)),
     volume_(new Slider(0, 1, this)), time_(new QLabel(this)), status_(new QLabel(this)) {
     setAccessibleName(tr("Video player"));
     video_->setMinimumSize(160, 90);
     video_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    video_->setObjectName(QStringLiteral("videoRenderer"));
     player_->setAudioOutput(audio_);
-    player_->setVideoOutput(video_);
+    player_->setVideoSink(video_->videoSink());
     audio_->setVolume(.75F);
     auto* hostLayout = new QVBoxLayout(this);
     hostLayout->setContentsMargins(0, 0, 0, 0);
@@ -154,7 +155,32 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     controlLayout->setContentsMargins(12, 8, 12, 8);
     controlLayout->setSpacing(4);
     controlLayout->addWidget(timeline_);
-    layout->addWidget(controls_, 0, 0, Qt::AlignBottom);
+    auto* bottom = new QWidget(surface_);
+    auto* bottomLayout = new QVBoxLayout(bottom);
+    bottomLayout->setContentsMargins(0, 0, 0, 0);
+    bottomLayout->setSpacing(8);
+    auto* captions = new QLabel(bottom);
+    captions->setObjectName(QStringLiteral("videoCaptions"));
+    captions->setTextFormat(Qt::PlainText);
+    captions->setWordWrap(true);
+    captions->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    captions->setMaximumHeight(64);
+    captions->setAlignment(Qt::AlignCenter);
+    captions->setAttribute(Qt::WA_TransparentForMouseEvents);
+    captions->setStyleSheet(QStringLiteral("color: white; background: rgba(0,0,0,180); padding: 6px 12px;"));
+    captions->hide();
+    bottomLayout->addWidget(captions);
+    bottomLayout->addWidget(controls_);
+    layout->addWidget(bottom, 0, 0, Qt::AlignBottom);
+    connect(video_->videoSink(), &QVideoSink::subtitleTextChanged, captions, [captions](const QString& text) {
+        captions->setText(text);
+        captions->setVisible(!text.isEmpty());
+    });
+    connect(video_, &QRhiWidget::renderFailed, this, [this] {
+        renderingFailed_ = true;
+        player_->pause();
+        updateTransport();
+    });
     auto* transport = new QHBoxLayout;
     transport->setContentsMargins(0, 0, 0, 0);
     transport->setSpacing(4);
@@ -270,30 +296,43 @@ VideoPlayer::~VideoPlayer() {
     fade_->stop();
     for (auto* child : surface_->findChildren<QWidget*>()) child->removeEventFilter(this);
     surface_->removeEventFilter(this);
+    disconnect(video_, nullptr, this, nullptr);
     disconnect(player_, nullptr, this, nullptr);
     player_->stop();
     player_->setVideoOutput(nullptr);
     player_->setAudioOutput(nullptr);
 }
 
-void VideoPlayer::setSource(const QUrl& source) { player_->setSource(source); }
+void VideoPlayer::setSource(const QUrl& source) {
+    player_->setSource(source);
+}
 QSize VideoPlayer::sizeHint() const { return {640, 360}; }
 
 bool VideoPlayer::isFullScreen() const { return surface_->isFullScreen(); }
 
 void VideoPlayer::setFullScreen(bool enabled) {
     if (enabled == isFullScreen()) return;
+    if (enabled) previousFocus_ = QApplication::focusWidget();
+    auto* videoLayout = qobject_cast<QGridLayout*>(surface_->layout());
+    // Reparent the renderer itself so Qt releases its old window's RHI callbacks.
+    videoLayout->removeWidget(video_);
+    video_->setParent(this);
     if (enabled) {
-        previousFocus_ = QApplication::focusWidget();
         layout()->removeWidget(surface_);
         surface_->setParent(this, Qt::Window);
-        surface_->showFullScreen();
-        fullscreen_->setFocus(Qt::OtherFocusReason);
     } else {
         surface_->hide();
         surface_->setWindowState(Qt::WindowNoState);
         surface_->setParent(this, Qt::Widget);
         layout()->addWidget(surface_);
+    }
+    videoLayout->addWidget(video_, 0, 0);
+    video_->lower();
+    video_->show();
+    if (enabled) {
+        surface_->showFullScreen();
+        fullscreen_->setFocus(Qt::OtherFocusReason);
+    } else {
         surface_->show();
         if (previousFocus_) previousFocus_->setFocus(Qt::OtherFocusReason);
     }
@@ -335,9 +374,11 @@ void VideoPlayer::updateTransport() {
         play_->setIcon(mediaIcon(player_->isPlaying() ? MediaGlyph::Pause : MediaGlyph::Play));
     }
     const auto state = player_->mediaStatus();
-    play_->setEnabled(state != QMediaPlayer::NoMedia && state != QMediaPlayer::InvalidMedia);
+    play_->setEnabled(!renderingFailed_ && state != QMediaPlayer::NoMedia && state != QMediaPlayer::InvalidMedia);
     QString message;
-    if (player_->error() != QMediaPlayer::NoError)
+    if (renderingFailed_)
+        message = tr("Cannot display video with the current graphics backend.");
+    else if (player_->error() != QMediaPlayer::NoError)
         message = tr("Cannot play this video. %1").arg(player_->errorString());
     else if (state == QMediaPlayer::NoMedia) message = tr("Choose a video to start.");
     else if (state == QMediaPlayer::LoadingMedia) message = tr("Loading video…");
@@ -345,8 +386,8 @@ void VideoPlayer::updateTransport() {
         message = tr("Buffering…");
     status_->setText(message);
     status_->setVisible(!message.isEmpty());
-    open_->setVisible(state == QMediaPlayer::NoMedia || state == QMediaPlayer::InvalidMedia ||
-                      player_->error() != QMediaPlayer::NoError);
+    open_->setVisible(!renderingFailed_ && (state == QMediaPlayer::NoMedia || state == QMediaPlayer::InvalidMedia ||
+                      player_->error() != QMediaPlayer::NoError));
     open_->setText(player_->error() == QMediaPlayer::NoError ? tr("Open video") : tr("Open another file"));
     message_->setVisible(!message.isEmpty());
 }

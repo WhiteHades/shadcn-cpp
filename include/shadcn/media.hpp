@@ -5,7 +5,6 @@
 #include <QAudioOutput>
 #include <QMediaPlayer>
 
-class QVideoWidget;
 class QLabel;
 class QFileDialog;
 class QTimer;
@@ -13,6 +12,7 @@ class QGraphicsOpacityEffect;
 class QPropertyAnimation;
 
 namespace shadcn {
+namespace detail { class VideoSurface; }
 
 /// Native video playback. Link shadcn::media to use this optional component.
 class VideoPlayer : public QWidget {
@@ -48,7 +48,8 @@ private:
     QPropertyAnimation* fade_;
     QMediaPlayer* player_;
     QAudioOutput* audio_;
-    QVideoWidget* video_;
+    detail::VideoSurface* video_;
+    bool renderingFailed_ = false;
     Button* play_;
     Button* mute_;
     Button* open_;

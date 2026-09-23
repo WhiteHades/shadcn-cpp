@@ -1,12 +1,14 @@
 @PACKAGE_INIT@
 include(CMakeFindDependencyMacro)
-if(@SHADCN_BUILD_WIDGETS@)
+if("media" IN_LIST shadcn_FIND_COMPONENTS AND @SHADCN_BUILD_MEDIA@)
+    # The optional renderer uses Qt's internal texture helpers.
+    find_dependency(Qt6 @Qt6_VERSION@ EXACT COMPONENTS Widgets Multimedia)
+elseif(@SHADCN_BUILD_WIDGETS@)
     find_dependency(Qt6 6.8 COMPONENTS Widgets)
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/shadcnTargets.cmake")
 set(shadcn_media_FOUND FALSE)
 if("media" IN_LIST shadcn_FIND_COMPONENTS AND @SHADCN_BUILD_MEDIA@)
-    find_dependency(Qt6 6.8 COMPONENTS MultimediaWidgets)
     include("${CMAKE_CURRENT_LIST_DIR}/shadcnMediaTargets.cmake")
     set(shadcn_media_FOUND TRUE)
 endif()
