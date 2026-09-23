@@ -1,136 +1,114 @@
 // SPDX-License-Identifier: MIT
-#include <shadcn/widgets.hpp>
+#include "demos.hpp"
 #include <QApplication>
-#include <QPixmap>
-#include <algorithm>
 #include <QCommandLineParser>
 #include <QDir>
 #include <QFileInfo>
-#include <QGridLayout>
 #include <QHBoxLayout>
-#include <QLabel>
-#include <QScrollArea>
+#include <QListWidget>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <array>
 #include <iostream>
+#include <shadcn/widgets.hpp>
 
 int main(int argc, char** argv) {
-    using namespace shadcn;
     QApplication app(argc, argv);
     QCoreApplication::setApplicationName("shadcn-cpp gallery");
-    QCoreApplication::setApplicationVersion(version);
+    QCoreApplication::setApplicationVersion(shadcn::version);
     QCommandLineParser args;
-    args.setApplicationDescription("Native component gallery. Visual parity remains under review.");
-    args.addHelpOption(); args.addVersionOption();
-    args.addOption({"dark", "Use the dark neutral theme."});
+    args.setApplicationDescription("Native shadcn component gallery.");
+    args.addHelpOption();
+    args.addVersionOption();
+    args.addOption({"dark", "Use the dark theme."});
     args.addOption({"reduced-motion", "Disable motion."});
-    args.addOption({"rtl", "Use right-to-left layout."});
-    args.addOption({"screenshot", "Write a PNG and exit. This is a Qt capture, not a parity baseline.", "path"});
+    args.addOption({"rtl", "Use right to left layout."});
+    args.addOption({"component", "Show one component.", "name"});
+    args.addOption({"screenshot", "Save the visible component as a PNG.", "path"});
+    args.addOption({"capture-all", "Save every component as a PNG.", "directory"});
     args.process(app);
-    const bool capture = args.isSet("screenshot");
-    install(app, Theme::neutral(args.isSet("dark") ? ColorMode::Dark : ColorMode::Light),
-            args.isSet("reduced-motion") || capture ? MotionPolicy::Reduced : MotionPolicy::Full);
-    if (args.isSet("rtl")) app.setLayoutDirection(Qt::RightToLeft);
-    QWidget window;
-    window.setWindowTitle("shadcn-cpp · 0.1.0");
-    auto* outer = new QVBoxLayout(&window);
-    outer->setContentsMargins(28, 28, 28, 28); outer->setSpacing(20);
-    auto& heading = make_child<QLabel>(window, "shadcn-cpp");
-    auto headingFont = heading.font(); headingFont.setPixelSize(28); headingFont.setWeight(QFont::DemiBold); heading.setFont(headingFont);
-    outer->addWidget(&heading);
-    auto& note = make_child<QLabel>(window, "Native C++ components. Initial port, visual review pending.");
-    note.setWordWrap(true); outer->addWidget(&note);
-    auto* settings = new QHBoxLayout;
-    auto& dark = make_child<Switch>(window); dark.setChecked(args.isSet("dark"));
-    auto& darkLabel = make_child<Label>(window, "Dark theme"); darkLabel.setBuddy(&dark);
-    auto& motion = make_child<Switch>(window); motion.setChecked(args.isSet("reduced-motion") || capture);
-    auto& motionLabel = make_child<Label>(window, "Reduced motion"); motionLabel.setBuddy(&motion);
-    auto& rtl = make_child<Switch>(window); rtl.setChecked(args.isSet("rtl"));
-    auto& rtlLabel = make_child<Label>(window, "Right to left"); rtlLabel.setBuddy(&rtl);
-    settings->addWidget(&dark); settings->addWidget(&darkLabel); settings->addSpacing(20);
-    settings->addWidget(&motion); settings->addWidget(&motionLabel); settings->addSpacing(20);
-    settings->addWidget(&rtl); settings->addWidget(&rtlLabel); settings->addStretch(); outer->addLayout(settings);
-    const auto apply = [&] {
-        // Avoid replacing the application style from inside a widget's event dispatch.
-        QTimer::singleShot(0, &window, [&] {
-            install(app, Theme::neutral(dark.isChecked() ? ColorMode::Dark : ColorMode::Light),
-                    motion.isChecked() ? MotionPolicy::Reduced : MotionPolicy::Full);
-        });
-    };
-    QObject::connect(&dark, &QCheckBox::toggled, &window, apply);
-    QObject::connect(&motion, &QCheckBox::toggled, &window, apply);
-    QObject::connect(&rtl, &QCheckBox::toggled, &window, [&](bool checked) {
-        app.setLayoutDirection(checked ? Qt::RightToLeft : Qt::LeftToRight);
-    });
-    auto& scroll = make_child<QScrollArea>(window);
-    scroll.setWidgetResizable(true); scroll.setFrameShape(QFrame::NoFrame);
-    auto* page = new QWidget;
-    scroll.setWidget(page); // QScrollArea takes ownership.
-    auto* grid = new QGridLayout(page); grid->setContentsMargins(0, 0, 12, 0); grid->setSpacing(20);
-    outer->addWidget(&scroll);
-    auto& buttons = make_child<Card>(*page); buttons.setTitle("Buttons");
-    buttons.setDescription("Six variants with native keyboard activation.");
-    constexpr std::array variants{Variant::Default, Variant::Destructive, Variant::Outline,
-        Variant::Secondary, Variant::Ghost, Variant::Link};
-    const std::array names{"Default", "Destructive", "Outline", "Secondary", "Ghost", "Link"};
-    for (std::size_t i = 0; i < variants.size(); ++i) {
-        auto& button = make_child<Button>(buttons, QString::fromLatin1(names[i]));
-        button.setVariant(variants[i]); buttons.content().addWidget(&button);
+    const bool capture = args.isSet("screenshot") || args.isSet("capture-all");
+    const bool dark = args.isSet("dark");
+    shadcn::install(
+        app, shadcn::Theme::neutral(dark ? shadcn::ColorMode::Dark : shadcn::ColorMode::Light),
+        capture || args.isSet("reduced-motion") ? shadcn::MotionPolicy::Reduced
+                                                : shadcn::MotionPolicy::Full);
+    if (args.isSet("rtl"))
+        app.setLayoutDirection(Qt::RightToLeft);
+    const auto names = gallery::components();
+    if (args.isSet("component") && !names.contains(args.value("component"))) {
+        std::cerr << "Unknown component\n";
+        return 1;
     }
-    auto& disabled = make_child<Button>(buttons, "Disabled"); disabled.setEnabled(false);
-    buttons.content().addWidget(&disabled); grid->addWidget(&buttons, 0, 0);
-    auto& course = make_child<Card>(*page); course.setTitle("Modern C++");
-    course.setDescription("Lesson 7 of 18. Templates and constrained functions.");
-    auto& state = make_child<Badge>(course, "In progress"); state.setVariant(Variant::Secondary);
-    course.action().addWidget(&state);
-    auto& name = make_child<Input>(course); name.setPlaceholderText("Search lessons");
-    auto& nameLabel = make_child<Label>(course, "Lesson search"); nameLabel.setBuddy(&name);
-    course.content().addWidget(&nameLabel); course.content().addWidget(&name);
-    auto& progress = make_child<Progress>(course); progress.setValue(39); progress.setAccessibleName("Course progress");
-    course.content().addWidget(&progress);
-    auto& completion = make_child<Checkbox>(course, "Mark lesson complete"); course.content().addWidget(&completion);
-    course.content().addWidget(&make_child<Separator>(course, Qt::Horizontal));
-    auto& resume = make_child<Button>(course, "Continue lesson");
-    auto& previous = make_child<Button>(course, "Previous"); previous.setVariant(Variant::Outline);
-    course.footer().addWidget(&previous); course.footer().addStretch(); course.footer().addWidget(&resume);
-    QObject::connect(&resume, &QPushButton::clicked, &course, [&] { progress.setValue(std::min(100, progress.value() + 5)); });
-    QObject::connect(&previous, &QPushButton::clicked, &course, [&] { progress.setValue(std::max(0, progress.value() - 5)); });
-    grid->addWidget(&course, 0, 1, Qt::AlignTop);
-    auto& inputs = make_child<Card>(*page); inputs.setTitle("Input states");
-    auto& error = make_child<Input>(inputs); error.setPlaceholderText("Course name"); error.setError("A course name is required.");
-    auto& errorLabel = make_child<Label>(inputs, "Course name"); errorLabel.setBuddy(&error);
-    inputs.content().addWidget(&errorLabel); inputs.content().addWidget(&error);
-    auto& password = make_child<Input>(inputs); password.setEchoMode(QLineEdit::Password);
-    password.setPlaceholderText("Password"); password.setAccessibleName("Password"); inputs.content().addWidget(&password);
-    auto& loading = make_child<Skeleton>(inputs); inputs.content().addWidget(&loading);
-    auto& loadingTwo = make_child<Skeleton>(inputs); loadingTwo.setMaximumWidth(190); inputs.content().addWidget(&loadingTwo);
-    grid->addWidget(&inputs, 1, 0, Qt::AlignTop);
-    auto& sizes = make_child<Card>(*page); sizes.setTitle("Button sizes");
-    constexpr std::array sizeValues{ButtonSize::Xs, ButtonSize::Sm, ButtonSize::Default, ButtonSize::Lg,
-        ButtonSize::IconXs, ButtonSize::IconSm, ButtonSize::Icon, ButtonSize::IconLg};
-    const std::array sizeNames{"Extra small", "Small", "Default", "Large", "Icon xs", "Icon small", "Icon", "Icon large"};
-    for (std::size_t i = 0; i < sizeValues.size(); ++i) {
-        auto& row = make_child<QWidget>(sizes);
-        auto* layout = new QHBoxLayout(&row); layout->setContentsMargins(0,0,0,0);
-        auto& button = make_child<Button>(row, "Continue"); button.setButtonSize(sizeValues[i]);
-        button.setVariant(Variant::Outline);
-        // Icon-only samples intentionally have no asset. Applications supply QIcon.
-        if (button_metrics(sizeValues[i]).iconOnly) button.setAccessibleName(QString::fromLatin1(sizeNames[i]));
-        layout->addWidget(&button); layout->addWidget(&make_child<QLabel>(row, QString::fromLatin1(sizeNames[i]))); layout->addStretch();
-        sizes.content().addWidget(&row);
+    if (args.isSet("capture-all")) {
+        const QDir output(args.value("capture-all"));
+        if (!QDir().mkpath(output.absolutePath()))
+            return 1;
+        for (const auto& name : names) {
+            auto* preview = gallery::demo(name);
+            preview->resize(640, name == "card" ? 360 : 300);
+            preview->show();
+            QApplication::processEvents();
+            preview->setFocusPolicy(Qt::ClickFocus);
+            preview->setFocus(Qt::MouseFocusReason);
+            QApplication::processEvents();
+            const bool saved = gallery::capture(*preview).save(
+                output.filePath(name + (dark ? "-dark.png" : "-light.png")), "PNG");
+            delete preview;
+            if (!saved) {
+                std::cerr << "Could not save preview\n";
+                return 1;
+            }
+        }
+        return 0;
     }
-    grid->addWidget(&sizes, 1, 1, Qt::AlignTop);
-    grid->setColumnStretch(0, 1); grid->setColumnStretch(1, 1);
-    window.resize(1060, 970); window.show();
-    if (capture) {
+    QWidget* window = nullptr;
+    if (args.isSet("component")) {
+        window = gallery::demo(args.value("component"));
+        window->resize(640, 360);
+    } else {
+        window = new QWidget;
+        auto* outer = new QHBoxLayout(window);
+        outer->setContentsMargins(0, 0, 0, 0);
+        outer->setSpacing(0);
+        auto* navigation = new QListWidget(window);
+        navigation->setFixedWidth(200);
+        navigation->setFrameShape(QFrame::NoFrame);
+        navigation->setStyleSheet("QListWidget { padding: 20px 8px; } QListWidget::item { padding: "
+                                  "8px 12px; border-radius: 6px; }");
+        auto* pages = new QStackedWidget(window);
+        for (const auto& name : names) {
+            auto title = name;
+            title.replace('-', ' ');
+            title[0] = title[0].toUpper();
+            navigation->addItem(title);
+            pages->addWidget(gallery::demo(name, pages));
+        }
+        outer->addWidget(navigation);
+        outer->addWidget(new shadcn::Separator(Qt::Vertical, window));
+        outer->addWidget(pages, 1);
+        QObject::connect(navigation, &QListWidget::currentRowChanged, pages,
+                         &QStackedWidget::setCurrentIndex);
+        navigation->setCurrentRow(static_cast<int>(names.indexOf("button")));
+        window->resize(960, 600);
+    }
+    window->setWindowTitle("shadcn-cpp");
+#ifdef Q_OS_WASM
+    window->showFullScreen();
+    window->setFocusPolicy(Qt::ClickFocus);
+    window->setFocus(Qt::MouseFocusReason);
+#else
+    window->show();
+#endif
+    if (args.isSet("screenshot")) {
         const auto path = args.value("screenshot");
-        QTimer::singleShot(250, &window, [&, path] {
-            const QFileInfo destination(path);
-            if (!QDir().mkpath(destination.absolutePath()) || !window.grab().save(path, "PNG")) {
-                std::cerr << "Could not write screenshot\n"; app.exit(1);
-            } else app.exit(0);
+        QTimer::singleShot(150, window, [&, path] {
+            const QFileInfo target(path);
+            app.exit(QDir().mkpath(target.absolutePath()) && gallery::capture(*window).save(path, "PNG") ? 0
+                                                                                              : 1);
         });
     }
-    return app.exec();
+    const int result = app.exec();
+    delete window;
+    return result;
 }
