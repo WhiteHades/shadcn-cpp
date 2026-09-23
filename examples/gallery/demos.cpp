@@ -24,7 +24,7 @@ QStringList components() {
                       "accordion", "collapsible", "tabs", "scroll-area", "resizable",
                       "sidebar", "navigation-menu", "menubar", "dropdown-menu", "context-menu",
                       "carousel", "pagination", "direction", "toast", "sonner", "attachment",
-                      "bubble", "message", "message-scroller", "questionnaire", "marker"};
+                      "bubble", "message", "message-scroller", "questionnaire", "marker", "button-ripple"};
     names.sort();
     return names;
 }
@@ -63,6 +63,11 @@ QWidget* demo(const QString& name, QWidget* parent) {
         icon->setIcon(QIcon(image));
         row->addWidget(icon);
         layout->addLayout(row);
+    } else if (name == "button-ripple") {
+        auto* button = new Button("Click anywhere", host);
+        button->setVariant(Variant::Outline);
+        button->setRippleEnabled(true);
+        layout->addWidget(button);
     } else if (name == "card") {
         auto* card = new Card(host);
         card->setTitle("Create project");

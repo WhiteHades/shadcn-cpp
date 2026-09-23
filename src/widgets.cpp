@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 
 static void initialiseFonts() { Q_INIT_RESOURCE(fonts); }
 
@@ -285,8 +286,11 @@ void Button::setInvalid(bool invalid) {
     setInvalidProperty(*this, invalid);
 }
 void Button::clearRipples() {
-    for (const auto& ripple : ripples_) delete ripple.animation;
-    ripples_.clear();
+    const auto cancelled = std::exchange(ripples_, {});
+    for (const auto& ripple : cancelled) {
+        ripple.animation->stop();
+        ripple.animation->deleteLater();
+    }
     update();
 }
 void Button::setRippleEnabled(bool enabled) {
