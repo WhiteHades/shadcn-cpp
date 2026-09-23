@@ -785,9 +785,19 @@ void Slider::setValues(const QVector<double>& values) {
     if (next.isEmpty()) return;
     std::sort(next.begin(), next.end());
     if (next == values_) return;
+    const auto previous = values_;
     values_ = next;
     if (activeThumb_ >= values_.size()) activeThumb_ = static_cast<int>(values_.size()) - 1;
     updateAccessibleValue();
+    if (auto* accessible = QAccessible::queryAccessibleInterface(this)) {
+        for (int i = 0; i < values_.size(); ++i) {
+            if (i < previous.size() && previous[i] == values_[i]) continue;
+            if (auto* thumb = accessible->child(i)) {
+                QAccessibleValueChangeEvent change(thumb, values_[i]);
+                QAccessible::updateAccessibility(&change);
+            }
+        }
+    }
     update();
     emit valuesChanged(values_);
 }
@@ -820,14 +830,6 @@ void Slider::updateAccessibleValue() {
             .arg(QString::number(values_.at(index)), QString::number(index + 1),
                  QString::number(values_.size()), QString::number(minimum_),
                  QString::number(maximum_)));
-    if (auto* accessible = QAccessible::queryAccessibleInterface(this)) {
-        for (int i = 0; i < values_.size(); ++i) {
-            if (auto* thumb = accessible->child(i)) {
-                QAccessibleValueChangeEvent change(thumb, values_.at(i));
-                QAccessible::updateAccessibility(&change);
-            }
-        }
-    }
 }
 
 QSize Slider::sizeHint() const { return orientation_ == Qt::Horizontal ? QSize(200, 24) : QSize(24, 160); }
@@ -859,7 +861,10 @@ double Slider::valueAt(const QPointF& point) const {
         fraction = (track.bottom() - point.y()) / std::max(1.0, track.height());
     if (orientation_ == Qt::Horizontal && layoutDirection() == Qt::RightToLeft)
         fraction = 1.0 - fraction;
-    return std::lerp(minimum_, maximum_, std::clamp(fraction, 0.0, 1.0));
+    const auto value = std::lerp(minimum_, maximum_, std::clamp(fraction, 0.0, 1.0));
+    const auto steps = (value - minimum_) / singleStep_;
+    if (!std::isfinite(steps)) return value;
+    return std::clamp(std::fma(std::round(steps), singleStep_, minimum_), minimum_, maximum_);
 }
 
 int Slider::thumbAt(const QPointF& point) const {
@@ -878,9 +883,13 @@ int Slider::thumbAt(const QPointF& point) const {
     return selected;
 }
 
-void Slider::setValueAt(int index, double value) {
+void Slider::setValueAt(int index, double value, bool push) {
     if (index < 0 || index >= values_.size() || !std::isfinite(value)) return;
     value = std::clamp(value, minimum_, maximum_);
+    if (!push) {
+        if (index > 0) value = std::max(value, values_[index - 1]);
+        if (index + 1 < values_.size()) value = std::min(value, values_[index + 1]);
+    }
     auto next = values_;
     next[index] = value;
     for (int i = index - 1; i >= 0; --i) next[i] = std::min(next[i], value);
@@ -931,14 +940,14 @@ void Slider::mousePressEvent(QMouseEvent* event) {
     setFocus(Qt::MouseFocusReason);
     activeThumb_ = thumbAt(event->position());
     updateAccessibleValue();
-    setValueAt(activeThumb_, valueAt(event->position()));
+    setValueAt(activeThumb_, valueAt(event->position()), true);
     grabMouse();
     update();
 }
 
 void Slider::mouseMoveEvent(QMouseEvent* event) {
     if (event->buttons().testFlag(Qt::LeftButton) && activeThumb_ >= 0)
-        setValueAt(activeThumb_, valueAt(event->position()));
+        setValueAt(activeThumb_, valueAt(event->position()), true);
 }
 
 void Slider::mouseReleaseEvent(QMouseEvent* event) {
