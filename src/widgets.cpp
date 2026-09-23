@@ -293,7 +293,7 @@ QSize Button::sizeHint() const {
     const auto padding = hasIcon ? m.iconPadding + m.padding : m.padding * 2;
     const auto textWidth = fm.size(Qt::TextShowMnemonic, text()).width();
     const auto content = textWidth + (hasIcon ? static_cast<int>(m.iconSize + (text().isEmpty() ? 0 : m.gap)) : 0);
-    return {content + static_cast<int>(padding), height};
+    return {content + static_cast<int>(padding) + 2, height};
 }
 QSize Button::minimumSizeHint() const { return sizeHint(); }
 void Button::updateHover() {
@@ -322,7 +322,8 @@ void Button::paintEvent(QPaintEvent*) {
     const auto& theme = themeFor(*this);
     auto look = appearance(theme, variant_, hoverAmount_);
     if (invalid_) look.border = color(theme, Role::Destructive);
-    else if (focusVisible(*this)) look.border = color(theme, Role::Ring);
+    else if (focusVisible(*this)) look.border = variant_ == Variant::Destructive
+        ? alpha(color(theme, Role::Destructive), .4) : color(theme, Role::Ring);
     if (!isEnabled()) painter.setOpacity(.5);
     const auto radius = size_ == ButtonSize::Xs || size_ == ButtonSize::Sm ||
                         size_ == ButtonSize::IconXs || size_ == ButtonSize::IconSm
