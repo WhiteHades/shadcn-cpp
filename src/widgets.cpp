@@ -141,16 +141,19 @@ protected:
             keyboard_ = static_cast<QFocusEvent*>(event)->reason() != Qt::MouseFocusReason;
         if (event->type() == QEvent::DynamicPropertyChange) {
             const auto name = static_cast<QDynamicPropertyChangeEvent*>(event)->propertyName();
-            if (name == "shadcnInvalid" || name == "shadcnDestructive") update();
+            if (name != "shadcnInvalid" && name != "shadcnDestructive") return result;
         }
         switch (event->type()) {
+        case QEvent::DynamicPropertyChange:
         case QEvent::FocusIn: case QEvent::FocusOut: case QEvent::Show: case QEvent::Hide:
         case QEvent::Move: case QEvent::Resize: case QEvent::EnabledChange:
         case QEvent::StyleChange: case QEvent::PaletteChange: case QEvent::ParentChange: {
             const auto visible = target_->hasFocus() && target_->isVisible() && target_->isEnabled()
                                  && (always_ || keyboard_);
             target_->setProperty("shadcnFocusVisible", visible);
-            setVisible(visible && widget() == target_.data());
+            const auto invalid = target_->property("shadcnInvalid").toBool();
+            setVisible((visible || invalid) && target_->isVisible()
+                       && widget() == target_.data());
             target_->update();
             update();
             break;
@@ -160,8 +163,9 @@ protected:
         return result;
     }
     void paintEvent(QPaintEvent*) override {
-        if (!target_ || !target_->hasFocus() || widget() != target_.data() || !parentWidget()) return;
+        if (!target_ || widget() != target_.data() || !parentWidget()) return;
         QPainter painter(this);
+        if (!target_->isEnabled()) painter.setOpacity(.5);
         painter.setRenderHint(QPainter::Antialiasing);
         const auto origin = target_->mapTo(parentWidget(), QPoint(0, 0)) - pos();
         auto bounds = QRectF(QPointF(origin), QSizeF(target_->size()));
