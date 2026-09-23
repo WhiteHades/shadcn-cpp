@@ -120,6 +120,7 @@ public:
     explicit RadioGroupItem(const QString& text = {}, QWidget* parent = nullptr);
     QSize sizeHint() const override;
 protected:
+    bool hitButton(const QPoint& position) const override;
     void paintEvent(QPaintEvent*) override;
 };
 

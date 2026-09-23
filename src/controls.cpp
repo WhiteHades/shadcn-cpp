@@ -465,26 +465,36 @@ QSize RadioGroupItem::sizeHint() const {
     return {metrics.horizontalAdvance(text()) + 28, std::max(20, metrics.height() + 8)};
 }
 
+bool RadioGroupItem::hitButton(const QPoint& position) const { return rect().contains(position); }
+
 void RadioGroupItem::paintEvent(QPaintEvent*) {
     QPainter painter(this);
-    const auto center = QPointF(10, height() / 2.0);
+    const auto center = QPointF(12, height() / 2.0);
+    const bool dark = themeFor(*this).mode() == ColorMode::Dark;
+    const bool invalid = property("shadcnInvalid").toBool();
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setBrush(isChecked() ? colour(*this, Role::Primary) : Qt::transparent);
-    painter.setPen(QPen(isEnabled() ? borderFor(*this, property("shadcnInvalid").toBool())
-                                    : withAlpha(borderFor(*this), .5), 1));
-    painter.drawEllipse(center, 8, 8);
+    if (!isEnabled()) painter.setOpacity(.5);
+    if (invalid || hasFocus()) {
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(withAlpha(colour(*this, invalid ? Role::Destructive : Role::Ring),
+                                      invalid ? (dark ? .4 : .2) : .5), 3));
+        painter.drawEllipse(center, 9.5, 9.5);
+    }
+    auto border = colour(*this, isChecked() ? Role::Primary : Role::Input);
+    if (hasFocus()) border = colour(*this, Role::Ring);
+    if (invalid) border = dark ? withAlpha(colour(*this, Role::Destructive), .5)
+                              : colour(*this, isChecked() ? Role::Primary : Role::Destructive);
+    painter.setBrush(isChecked() ? colour(*this, Role::Primary)
+                                : dark ? withAlpha(colour(*this, Role::Input), .3) : QColor(Qt::transparent));
+    painter.setPen(QPen(border, 1));
+    painter.drawEllipse(center, 7.5, 7.5);
     if (isChecked()) {
         painter.setBrush(colour(*this, Role::PrimaryForeground));
         painter.setPen(Qt::NoPen);
-        painter.drawEllipse(center, 3, 3);
+        painter.drawEllipse(center, 4, 4);
     }
-    if (hasFocus()) {
-        painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(withAlpha(colour(*this, Role::Ring), .55), 2));
-        painter.drawEllipse(center, 10, 10);
-    }
-    painter.setPen(isEnabled() ? foregroundFor(*this) : muted(*this));
-    painter.drawText(QRect(26, 0, width() - 26, height()), Qt::AlignVCenter | Qt::TextShowMnemonic,
+    painter.setPen(foregroundFor(*this));
+    painter.drawText(QRect(28, 0, width() - 28, height()), Qt::AlignVCenter | Qt::TextShowMnemonic,
                      text());
 }
 
