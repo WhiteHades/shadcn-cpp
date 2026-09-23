@@ -4,6 +4,7 @@
 #include <QActionGroup>
 #include <QBoxLayout>
 #include <QLabel>
+#include <QFileDialog>
 #include <QMediaMetaData>
 #include <QMenu>
 #include <QShortcut>
@@ -26,7 +27,7 @@ QString timestamp(qint64 milliseconds) {
 VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     player_(new QMediaPlayer(this)), audio_(new QAudioOutput(this)),
     video_(new QVideoWidget(this)), play_(new Button(tr("Play"), this)),
-    mute_(new Button(tr("Mute"), this)), timeline_(new Slider(this)),
+    mute_(new Button(tr("Mute"), this)), open_(new Button(tr("Open video"), this)), timeline_(new Slider(this)),
     volume_(new Slider(0, 1, this)), time_(new QLabel(this)), status_(new QLabel(this)) {
     setAccessibleName(tr("Video player"));
     video_->setMinimumSize(160, 90);
@@ -41,6 +42,10 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     status_->setWordWrap(true);
     status_->setAccessibleName(tr("Playback status"));
     layout->addWidget(status_);
+    open_->setObjectName(QStringLiteral("videoOpen"));
+    open_->setVariant(Variant::Outline);
+    layout->addWidget(open_, 0, Qt::AlignHCenter);
+    connect(open_, &QPushButton::clicked, this, &VideoPlayer::openFile);
     timeline_->setAccessibleName(tr("Playback position"));
     timeline_->setSingleStep(1000);
     timeline_->setPageStep(10000);
@@ -136,11 +141,36 @@ void VideoPlayer::updateTransport() {
         message = tr("Buffering…");
     status_->setText(message);
     status_->setVisible(!message.isEmpty());
+    open_->setVisible(state == QMediaPlayer::NoMedia || state == QMediaPlayer::InvalidMedia ||
+                      player_->error() != QMediaPlayer::NoError);
+    open_->setText(player_->error() == QMediaPlayer::NoError ? tr("Open video") : tr("Open another file"));
+}
+
+void VideoPlayer::openFile() {
+    if (fileDialog_) {
+        fileDialog_->raise();
+        fileDialog_->activateWindow();
+        return;
+    }
+    auto* dialog = new QFileDialog(this, tr("Open video"));
+    fileDialog_ = dialog;
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setFileMode(QFileDialog::ExistingFile);
+    dialog->setAcceptMode(QFileDialog::AcceptOpen);
+    // Do not filter by suffix: supported containers depend on the installed backend.
+    connect(dialog, &QFileDialog::fileSelected, this, [this](const QString& path) {
+        const QPointer<VideoPlayer> alive(this);
+        setSource(QUrl::fromLocalFile(path));
+        if (alive) player_->play();
+    });
+    dialog->open();
 }
 
 void VideoPlayer::showSettings() {
     auto* menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
+    connect(menu->addAction(tr("Open video…")), &QAction::triggered, this, &VideoPlayer::openFile);
+    menu->addSeparator();
     auto* speed = menu->addMenu(tr("Speed"));
     auto* rates = new QActionGroup(speed);
     for (const auto rate : {.5, .75, 1., 1.25, 1.5, 2.}) {

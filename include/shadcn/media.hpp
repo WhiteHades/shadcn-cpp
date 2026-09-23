@@ -7,6 +7,7 @@
 
 class QVideoWidget;
 class QLabel;
+class QFileDialog;
 
 namespace shadcn {
 
@@ -25,11 +26,14 @@ public:
 private:
     void updateTransport();
     void showSettings();
+    void openFile();
+    QPointer<QFileDialog> fileDialog_;
     QMediaPlayer* player_;
     QAudioOutput* audio_;
     QVideoWidget* video_;
     Button* play_;
     Button* mute_;
+    Button* open_;
     Slider* timeline_;
     Slider* volume_;
     QLabel* time_;
