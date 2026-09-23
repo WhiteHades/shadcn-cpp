@@ -126,6 +126,7 @@ class RadioGroup : public QWidget {
     Q_OBJECT
 public:
     explicit RadioGroup(QWidget* parent = nullptr);
+    ~RadioGroup() override;
     void addItem(RadioGroupItem& item, const QString& value = {});
     void removeItem(RadioGroupItem& item);
     [[nodiscard]] QList<RadioGroupItem*> items() const;
@@ -133,7 +134,10 @@ public:
     void setCheckedValue(const QString& value);
 signals:
     void valueChanged(const QString& value);
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 private:
+    void updateTabStop();
     QVBoxLayout* layout_;
     QButtonGroup* buttons_;
     QList<QPointer<RadioGroupItem>> items_;

@@ -490,17 +490,36 @@ RadioGroup::RadioGroup(QWidget* parent) : QWidget(parent), layout_(new QVBoxLayo
     buttons_->setExclusive(true);
 }
 
+RadioGroup::~RadioGroup() {
+    for (const auto& item : items_) {
+        if (!item) continue;
+        item->removeEventFilter(this);
+        disconnect(item, nullptr, this, nullptr);
+    }
+}
+
 void RadioGroup::addItem(RadioGroupItem& item, const QString& value) {
     if (items_.contains(&item)) return;
     layout_->addWidget(&item);
     const auto itemValue = value.isEmpty() ? item.text() : value;
     values_.insert(&item, itemValue);
     items_.append(QPointer<RadioGroupItem>(&item));
+    item.installEventFilter(this);
+    connect(&item, &QObject::destroyed, this, [this, key = &item](QObject* destroyed) {
+        values_.remove(key);
+        items_.removeIf([destroyed](const auto& observed) {
+            return QPointer<QObject>(observed).data() == destroyed;
+        });
+        updateTabStop();
+    });
     buttons_->addButton(&item, static_cast<int>(buttons_->buttons().size()));
     const QPointer<RadioGroupItem> observed(&item);
     connect(&item, &QAbstractButton::toggled, this, [this, observed](bool checked) {
-        if (checked && observed) emit valueChanged(values_.value(observed.data(), observed->text()));
+        if (!observed || !items_.contains(observed)) return;
+        updateTabStop();
+        if (checked) emit valueChanged(values_.value(observed.data(), observed->text()));
     });
+    updateTabStop();
 }
 
 void RadioGroup::removeItem(RadioGroupItem& item) {
@@ -509,8 +528,52 @@ void RadioGroup::removeItem(RadioGroupItem& item) {
     buttons_->removeButton(&item);
     values_.remove(&item);
     items_.removeAll(QPointer<RadioGroupItem>(&item));
+    item.removeEventFilter(this);
+    item.setFocusPolicy(Qt::StrongFocus);
     item.setParent(nullptr);
     item.hide();
+    updateTabStop();
+}
+
+void RadioGroup::updateTabStop() {
+    RadioGroupItem* entry = nullptr;
+    for (const auto& item : items_) {
+        if (!item || !item->isEnabled() || item->isHidden()) continue;
+        if (!entry || item->isChecked()) entry = item;
+        if (item->isChecked()) break;
+    }
+    for (const auto& item : items_)
+        if (item) item->setFocusPolicy(item == entry ? Qt::StrongFocus : Qt::ClickFocus);
+}
+
+bool RadioGroup::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::EnabledChange || event->type() == QEvent::Show ||
+        event->type() == QEvent::Hide) updateTabStop();
+    if (event->type() == QEvent::KeyPress) {
+        const auto* keyEvent = static_cast<QKeyEvent*>(event);
+        const auto key = keyEvent->key();
+        if (key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down) {
+            if (keyEvent->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) {
+                event->ignore();
+                return true;
+            }
+            QList<RadioGroupItem*> available;
+            for (const auto& item : items_)
+                if (item && item->isEnabled() && !item->isHidden()) available.append(item);
+            const auto index = available.indexOf(qobject_cast<RadioGroupItem*>(watched));
+            if (index < 0) return false;
+            int direction = key == Qt::Key_Down || key == Qt::Key_Right ? 1 : -1;
+            if ((key == Qt::Key_Left || key == Qt::Key_Right) && layoutDirection() == Qt::RightToLeft)
+                direction = -direction;
+            const QPointer<RadioGroupItem> next = available.at(
+                (index + direction + available.size()) % available.size());
+            next->setFocus(Qt::OtherFocusReason);
+            if (next) next->setChecked(true);
+            event->accept();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 QList<RadioGroupItem*> RadioGroup::items() const {
