@@ -17,8 +17,8 @@ The design and motion of shadcn, built with native C++ and Qt Widgets. Small API
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/previews/card-dark.png" />
-    <img src="assets/previews/card-light.png" alt="Native card with a project name field and Cancel and Create buttons" width="640" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/previews/bento-dark.png" />
+    <img src="assets/previews/bento-light.png" alt="Native C++ components in a bento grid: calendar, card, buttons, badges, chart, switches, checkbox, slider, progress and inputs" width="1200" />
   </picture>
 </p>
 
