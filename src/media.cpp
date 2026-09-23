@@ -7,6 +7,10 @@
 #include <QBoxLayout>
 #include <QLabel>
 #include <QFileDialog>
+#include <QGridLayout>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
+#include <QTimer>
 #include <QMediaMetaData>
 #include <QMenu>
 #include <QShortcut>
@@ -27,7 +31,9 @@ QString timestamp(qint64 milliseconds) {
 }
 
 VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
-    surface_(new QWidget(this)),
+    surface_(new QWidget(this)), controls_(new QWidget(surface_)), message_(new QWidget(surface_)),
+    idle_(new QTimer(this)), opacity_(new QGraphicsOpacityEffect(controls_)),
+    fade_(new QPropertyAnimation(opacity_, "opacity", this)),
     player_(new QMediaPlayer(this)), audio_(new QAudioOutput(this)),
     video_(new QVideoWidget(this)), play_(new Button(tr("Play"), this)),
     mute_(new Button(tr("Mute"), this)), open_(new Button(tr("Open video"), this)),
@@ -45,23 +51,35 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     surface_->setObjectName(QStringLiteral("videoSurface"));
     surface_->setWindowTitle(tr("Video player"));
     surface_->installEventFilter(this);
-    auto* layout = new QVBoxLayout(surface_);
+    auto* layout = new QGridLayout(surface_);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(8);
-    layout->addWidget(video_, 1);
+    layout->addWidget(video_, 0, 0);
+    auto* messageLayout = new QVBoxLayout(message_);
+    message_->setMaximumWidth(480);
+    messageLayout->setContentsMargins(24, 24, 24, 24);
     status_->setWordWrap(true);
+    status_->setAlignment(Qt::AlignCenter);
     status_->setAccessibleName(tr("Playback status"));
-    layout->addWidget(status_);
+    messageLayout->addWidget(status_);
     open_->setObjectName(QStringLiteral("videoOpen"));
     open_->setVariant(Variant::Outline);
-    layout->addWidget(open_, 0, Qt::AlignHCenter);
+    messageLayout->addWidget(open_, 0, Qt::AlignHCenter);
+    layout->addWidget(message_, 0, 0, Qt::AlignCenter);
     connect(open_, &QPushButton::clicked, this, &VideoPlayer::openFile);
     timeline_->setAccessibleName(tr("Playback position"));
     timeline_->setSingleStep(1000);
     timeline_->setPageStep(10000);
-    layout->addWidget(timeline_);
+    controls_->setObjectName(QStringLiteral("videoControls"));
+    controls_->setAutoFillBackground(true);
+    controls_->setGraphicsEffect(opacity_);
+    opacity_->setOpacity(1);
+    auto* controlLayout = new QVBoxLayout(controls_);
+    controlLayout->setContentsMargins(12, 8, 12, 8);
+    controlLayout->setSpacing(4);
+    controlLayout->addWidget(timeline_);
+    layout->addWidget(controls_, 0, 0, Qt::AlignBottom);
     auto* transport = new QHBoxLayout;
-    transport->setContentsMargins(8, 0, 8, 8);
+    transport->setContentsMargins(0, 0, 0, 0);
     auto* settings = new Button(tr("Settings"), this);
     settings->setObjectName(QStringLiteral("videoSettings"));
     for (auto* button : {play_, mute_, settings, fullscreen_}) {
@@ -82,7 +100,37 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     transport->addWidget(settings);
     fullscreen_->setObjectName(QStringLiteral("videoFullscreen"));
     transport->addWidget(fullscreen_);
-    layout->addLayout(transport);
+    controlLayout->addLayout(transport);
+    controls_->raise();
+    message_->raise();
+    idle_->setObjectName(QStringLiteral("videoControlsIdle"));
+    idle_->setSingleShot(true);
+    idle_->setInterval(2500);
+    QEasingCurve easing(QEasingCurve::BezierSpline);
+    easing.addCubicBezierSegment(QPointF(.23, 1), QPointF(.32, 1), QPointF(1, 1));
+    fade_->setEasingCurve(easing);
+    fade_->setDuration(160);
+    connect(idle_, &QTimer::timeout, this, [this] {
+        const auto* focused = QApplication::focusWidget();
+        if (!player_->isPlaying() || controls_->underMouse() || fileDialog_ ||
+            QApplication::activePopupWidget() || (focused && controls_->isAncestorOf(focused))) return;
+        fade_->stop();
+        fade_->setStartValue(opacity_->opacity());
+        fade_->setEndValue(0.);
+        const auto* style = qobject_cast<const Style*>(this->style());
+        if (style && style->motion() == MotionPolicy::Reduced) opacity_->setOpacity(0);
+        else fade_->start();
+    });
+    video_->setFocusPolicy(Qt::StrongFocus);
+    for (auto* child : surface_->findChildren<QWidget*>()) {
+        child->setMouseTracking(true);
+        child->installEventFilter(this);
+    }
+    surface_->setMouseTracking(true);
+    connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focused) {
+        if (focused && (focused == surface_ || surface_->isAncestorOf(focused))) revealControls();
+    });
+    connect(player_, &QMediaPlayer::playbackStateChanged, this, &VideoPlayer::revealControls);
     connect(play_, &QPushButton::clicked, this, [this] {
         if (player_->isPlaying()) player_->pause();
         else player_->play();
@@ -129,6 +177,10 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
 }
 
 VideoPlayer::~VideoPlayer() {
+    disconnect(qApp, nullptr, this, nullptr);
+    idle_->stop();
+    fade_->stop();
+    for (auto* child : surface_->findChildren<QWidget*>()) child->removeEventFilter(this);
     surface_->removeEventFilter(this);
     disconnect(player_, nullptr, this, nullptr);
     player_->stop();
@@ -137,7 +189,7 @@ VideoPlayer::~VideoPlayer() {
 }
 
 void VideoPlayer::setSource(const QUrl& source) { player_->setSource(source); }
-QSize VideoPlayer::sizeHint() const { return {640, 440}; }
+QSize VideoPlayer::sizeHint() const { return {640, 360}; }
 
 bool VideoPlayer::isFullScreen() const { return surface_->isFullScreen(); }
 
@@ -167,7 +219,17 @@ bool VideoPlayer::eventFilter(QObject* watched, QEvent* event) {
         setFullScreen(false);
         return true;
     }
+    if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress ||
+        event->type() == QEvent::KeyPress || event->type() == QEvent::Enter || event->type() == QEvent::Leave)
+        revealControls();
     return QWidget::eventFilter(watched, event);
+}
+
+void VideoPlayer::revealControls() {
+    fade_->stop();
+    opacity_->setOpacity(1);
+    if (player_->isPlaying()) idle_->start();
+    else idle_->stop();
 }
 
 void VideoPlayer::updateTransport() {
@@ -191,6 +253,7 @@ void VideoPlayer::updateTransport() {
     open_->setVisible(state == QMediaPlayer::NoMedia || state == QMediaPlayer::InvalidMedia ||
                       player_->error() != QMediaPlayer::NoError);
     open_->setText(player_->error() == QMediaPlayer::NoError ? tr("Open video") : tr("Open another file"));
+    message_->setVisible(!message.isEmpty());
 }
 
 void VideoPlayer::openFile() {

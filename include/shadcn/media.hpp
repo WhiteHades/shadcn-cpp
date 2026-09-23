@@ -8,6 +8,9 @@
 class QVideoWidget;
 class QLabel;
 class QFileDialog;
+class QTimer;
+class QGraphicsOpacityEffect;
+class QPropertyAnimation;
 
 namespace shadcn {
 
@@ -34,9 +37,15 @@ private:
     void updateTransport();
     void showSettings();
     void openFile();
+    void revealControls();
     QPointer<QFileDialog> fileDialog_;
     QPointer<QWidget> previousFocus_;
     QWidget* surface_;
+    QWidget* controls_;
+    QWidget* message_;
+    QTimer* idle_;
+    QGraphicsOpacityEffect* opacity_;
+    QPropertyAnimation* fade_;
     QMediaPlayer* player_;
     QAudioOutput* audio_;
     QVideoWidget* video_;
