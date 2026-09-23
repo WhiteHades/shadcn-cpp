@@ -331,6 +331,7 @@ void VideoPlayer::setFullScreen(bool enabled) {
     video_->show();
     if (enabled) {
         surface_->showFullScreen();
+        surface_->activateWindow();
         fullscreen_->setFocus(Qt::OtherFocusReason);
     } else {
         surface_->show();
