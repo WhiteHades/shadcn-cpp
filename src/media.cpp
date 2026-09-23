@@ -1,0 +1,193 @@
+// SPDX-License-Identifier: MIT
+#include <shadcn/media.hpp>
+
+#include <QActionGroup>
+#include <QBoxLayout>
+#include <QLabel>
+#include <QMediaMetaData>
+#include <QMenu>
+#include <QShortcut>
+#include <QSignalBlocker>
+#include <QVideoWidget>
+#include <algorithm>
+
+namespace shadcn {
+namespace {
+QString timestamp(qint64 milliseconds) {
+    const auto seconds = std::max(qint64{0}, milliseconds) / 1000;
+    const auto minutes = seconds / 60;
+    if (minutes < 60)
+        return QStringLiteral("%1:%2").arg(minutes).arg(seconds % 60, 2, 10, QLatin1Char('0'));
+    return QStringLiteral("%1:%2:%3").arg(minutes / 60)
+        .arg(minutes % 60, 2, 10, QLatin1Char('0')).arg(seconds % 60, 2, 10, QLatin1Char('0'));
+}
+}
+
+VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
+    player_(new QMediaPlayer(this)), audio_(new QAudioOutput(this)),
+    video_(new QVideoWidget(this)), play_(new Button(tr("Play"), this)),
+    mute_(new Button(tr("Mute"), this)), timeline_(new Slider(this)),
+    volume_(new Slider(0, 1, this)), time_(new QLabel(this)), status_(new QLabel(this)) {
+    setAccessibleName(tr("Video player"));
+    video_->setMinimumSize(160, 90);
+    video_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    player_->setAudioOutput(audio_);
+    player_->setVideoOutput(video_);
+    audio_->setVolume(.75F);
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    layout->addWidget(video_, 1);
+    status_->setWordWrap(true);
+    status_->setAccessibleName(tr("Playback status"));
+    layout->addWidget(status_);
+    timeline_->setAccessibleName(tr("Playback position"));
+    timeline_->setSingleStep(1000);
+    timeline_->setPageStep(10000);
+    layout->addWidget(timeline_);
+    auto* transport = new QHBoxLayout;
+    transport->setContentsMargins(8, 0, 8, 8);
+    auto* settings = new Button(tr("Settings"), this);
+    settings->setObjectName(QStringLiteral("videoSettings"));
+    for (auto* button : {play_, mute_, settings}) {
+        button->setVariant(Variant::Ghost);
+        button->setButtonSize(ButtonSize::Sm);
+    }
+    play_->setObjectName(QStringLiteral("videoPlay"));
+    volume_->setAccessibleName(tr("Volume"));
+    volume_->setSingleStep(.05);
+    volume_->setPageStep(.1);
+    volume_->setFixedWidth(80);
+    volume_->setValues({.75});
+    transport->addWidget(play_);
+    transport->addWidget(time_);
+    transport->addStretch();
+    transport->addWidget(mute_);
+    transport->addWidget(volume_);
+    transport->addWidget(settings);
+    layout->addLayout(transport);
+    connect(play_, &QPushButton::clicked, this, [this] {
+        if (player_->isPlaying()) player_->pause();
+        else player_->play();
+    });
+    connect(mute_, &QPushButton::clicked, this, [this] { audio_->setMuted(!audio_->isMuted()); });
+    connect(settings, &QPushButton::clicked, this, &VideoPlayer::showSettings);
+    connect(timeline_, &Slider::valuesChanged, this, [this](const QVector<double>& values) {
+        if (player_->isSeekable() && !values.isEmpty())
+            player_->setPosition(static_cast<qint64>(values.first()));
+    });
+    connect(volume_, &Slider::valuesChanged, this, [this](const QVector<double>& values) {
+        if (!values.isEmpty()) audio_->setVolume(static_cast<float>(values.first()));
+    });
+    connect(audio_, &QAudioOutput::volumeChanged, this, [this](float value) {
+        const QSignalBlocker blocker(volume_);
+        volume_->setValues({value});
+    });
+    connect(audio_, &QAudioOutput::mutedChanged, this, [this](bool muted) {
+        mute_->setText(muted ? tr("Unmute") : tr("Mute"));
+    });
+    connect(player_, &QMediaPlayer::positionChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &QMediaPlayer::durationChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &QMediaPlayer::seekableChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &QMediaPlayer::playbackStateChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &QMediaPlayer::mediaStatusChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &QMediaPlayer::errorOccurred, this, &VideoPlayer::updateTransport);
+    const auto shortcut = [this](const QKeySequence& key, auto action) {
+        auto* binding = new QShortcut(key, this);
+        binding->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(binding, &QShortcut::activated, this, action);
+    };
+    shortcut(QKeySequence(Qt::Key_K), [this] { play_->click(); });
+    shortcut(QKeySequence(Qt::Key_M), [this] { mute_->click(); });
+    shortcut(QKeySequence(Qt::Key_J), [this] {
+        if (player_->isSeekable()) player_->setPosition(std::max(qint64{0}, player_->position() - 10000));
+    });
+    shortcut(QKeySequence(Qt::Key_L), [this] {
+        if (player_->isSeekable()) player_->setPosition(std::min(player_->duration(), player_->position() + 10000));
+    });
+    updateTransport();
+}
+
+VideoPlayer::~VideoPlayer() {
+    disconnect(player_, nullptr, this, nullptr);
+    player_->stop();
+    player_->setVideoOutput(nullptr);
+    player_->setAudioOutput(nullptr);
+}
+
+void VideoPlayer::setSource(const QUrl& source) { player_->setSource(source); }
+QSize VideoPlayer::sizeHint() const { return {640, 440}; }
+
+void VideoPlayer::updateTransport() {
+    const QSignalBlocker blocker(timeline_);
+    timeline_->setRange(0, static_cast<double>(std::max(qint64{1}, player_->duration())));
+    timeline_->setValues({static_cast<double>(player_->position())});
+    timeline_->setEnabled(player_->isSeekable());
+    time_->setText(timestamp(player_->position()) + QStringLiteral(" / ") + timestamp(player_->duration()));
+    play_->setText(player_->isPlaying() ? tr("Pause") : tr("Play"));
+    const auto state = player_->mediaStatus();
+    play_->setEnabled(state != QMediaPlayer::NoMedia && state != QMediaPlayer::InvalidMedia);
+    QString message;
+    if (player_->error() != QMediaPlayer::NoError)
+        message = tr("Cannot play this video. %1").arg(player_->errorString());
+    else if (state == QMediaPlayer::NoMedia) message = tr("Choose a video to start.");
+    else if (state == QMediaPlayer::LoadingMedia) message = tr("Loading video…");
+    else if (state == QMediaPlayer::StalledMedia || state == QMediaPlayer::BufferingMedia)
+        message = tr("Buffering…");
+    status_->setText(message);
+    status_->setVisible(!message.isEmpty());
+}
+
+void VideoPlayer::showSettings() {
+    auto* menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    auto* speed = menu->addMenu(tr("Speed"));
+    auto* rates = new QActionGroup(speed);
+    for (const auto rate : {.5, .75, 1., 1.25, 1.5, 2.}) {
+        auto* action = speed->addAction(QString::number(rate) + QStringLiteral("×"));
+        action->setCheckable(true);
+        action->setChecked(qFuzzyCompare(player_->playbackRate(), rate));
+        rates->addAction(action);
+        connect(action, &QAction::triggered, this, [this, rate] { player_->setPlaybackRate(rate); });
+    }
+    const auto tracks = [this, menu](const QString& title, const QList<QMediaMetaData>& list,
+                                   int active, bool subtitles) {
+        auto* submenu = menu->addMenu(title);
+        auto* group = new QActionGroup(submenu);
+        const auto add = [this, submenu, group, active, subtitles](const QString& label, int index) {
+            auto* action = submenu->addAction(label);
+            action->setCheckable(true);
+            action->setChecked(active == index);
+            group->addAction(action);
+            connect(action, &QAction::triggered, this, [this, index, subtitles] {
+                if (subtitles) player_->setActiveSubtitleTrack(index);
+                else player_->setActiveAudioTrack(index);
+            });
+        };
+        if (subtitles) add(tr("Off"), -1);
+        for (qsizetype i = 0; i < list.size(); ++i) {
+            auto label = list[i].stringValue(QMediaMetaData::Title);
+            if (label.isEmpty()) label = list[i].stringValue(QMediaMetaData::Language);
+            if (label.isEmpty()) label = tr("Track %1").arg(i + 1);
+            add(label, static_cast<int>(i));
+        }
+        submenu->setEnabled(!list.isEmpty());
+    };
+    tracks(tr("Audio"), player_->audioTracks(), player_->activeAudioTrack(), false);
+    tracks(tr("Captions"), player_->subtitleTracks(), player_->activeSubtitleTrack(), true);
+    auto* loop = menu->addAction(tr("Loop"));
+    loop->setCheckable(true);
+    loop->setChecked(player_->loops() == QMediaPlayer::Infinite);
+    connect(loop, &QAction::toggled, this, [this](bool enabled) {
+        player_->setLoops(enabled ? QMediaPlayer::Infinite : QMediaPlayer::Once);
+    });
+    auto* fill = menu->addAction(tr("Fill frame"));
+    fill->setCheckable(true);
+    fill->setChecked(video_->aspectRatioMode() == Qt::KeepAspectRatioByExpanding);
+    connect(fill, &QAction::toggled, this, [this](bool enabled) {
+        video_->setAspectRatioMode(enabled ? Qt::KeepAspectRatioByExpanding : Qt::KeepAspectRatio);
+    });
+    menu->popup(mapToGlobal(QPoint(width() - menu->sizeHint().width(), height())));
+}
+
+} // namespace shadcn
