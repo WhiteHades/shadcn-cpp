@@ -2,6 +2,8 @@
 #include <shadcn/media.hpp>
 
 #include <QActionGroup>
+#include <QApplication>
+#include <QCloseEvent>
 #include <QBoxLayout>
 #include <QLabel>
 #include <QFileDialog>
@@ -25,9 +27,11 @@ QString timestamp(qint64 milliseconds) {
 }
 
 VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
+    surface_(new QWidget(this)),
     player_(new QMediaPlayer(this)), audio_(new QAudioOutput(this)),
     video_(new QVideoWidget(this)), play_(new Button(tr("Play"), this)),
-    mute_(new Button(tr("Mute"), this)), open_(new Button(tr("Open video"), this)), timeline_(new Slider(this)),
+    mute_(new Button(tr("Mute"), this)), open_(new Button(tr("Open video"), this)),
+    fullscreen_(new Button(tr("Fullscreen"), this)), timeline_(new Slider(this)),
     volume_(new Slider(0, 1, this)), time_(new QLabel(this)), status_(new QLabel(this)) {
     setAccessibleName(tr("Video player"));
     video_->setMinimumSize(160, 90);
@@ -35,7 +39,13 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     player_->setAudioOutput(audio_);
     player_->setVideoOutput(video_);
     audio_->setVolume(.75F);
-    auto* layout = new QVBoxLayout(this);
+    auto* hostLayout = new QVBoxLayout(this);
+    hostLayout->setContentsMargins(0, 0, 0, 0);
+    hostLayout->addWidget(surface_);
+    surface_->setObjectName(QStringLiteral("videoSurface"));
+    surface_->setWindowTitle(tr("Video player"));
+    surface_->installEventFilter(this);
+    auto* layout = new QVBoxLayout(surface_);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
     layout->addWidget(video_, 1);
@@ -54,7 +64,7 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     transport->setContentsMargins(8, 0, 8, 8);
     auto* settings = new Button(tr("Settings"), this);
     settings->setObjectName(QStringLiteral("videoSettings"));
-    for (auto* button : {play_, mute_, settings}) {
+    for (auto* button : {play_, mute_, settings, fullscreen_}) {
         button->setVariant(Variant::Ghost);
         button->setButtonSize(ButtonSize::Sm);
     }
@@ -70,6 +80,8 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     transport->addWidget(mute_);
     transport->addWidget(volume_);
     transport->addWidget(settings);
+    fullscreen_->setObjectName(QStringLiteral("videoFullscreen"));
+    transport->addWidget(fullscreen_);
     layout->addLayout(transport);
     connect(play_, &QPushButton::clicked, this, [this] {
         if (player_->isPlaying()) player_->pause();
@@ -77,6 +89,7 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     });
     connect(mute_, &QPushButton::clicked, this, [this] { audio_->setMuted(!audio_->isMuted()); });
     connect(settings, &QPushButton::clicked, this, &VideoPlayer::showSettings);
+    connect(fullscreen_, &QPushButton::clicked, this, [this] { setFullScreen(!isFullScreen()); });
     connect(timeline_, &Slider::valuesChanged, this, [this](const QVector<double>& values) {
         if (player_->isSeekable() && !values.isEmpty())
             player_->setPosition(static_cast<qint64>(values.first()));
@@ -98,12 +111,14 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     connect(player_, &QMediaPlayer::mediaStatusChanged, this, &VideoPlayer::updateTransport);
     connect(player_, &QMediaPlayer::errorOccurred, this, &VideoPlayer::updateTransport);
     const auto shortcut = [this](const QKeySequence& key, auto action) {
-        auto* binding = new QShortcut(key, this);
+        auto* binding = new QShortcut(key, surface_);
         binding->setContext(Qt::WidgetWithChildrenShortcut);
         connect(binding, &QShortcut::activated, this, action);
     };
     shortcut(QKeySequence(Qt::Key_K), [this] { play_->click(); });
     shortcut(QKeySequence(Qt::Key_M), [this] { mute_->click(); });
+    shortcut(QKeySequence(Qt::Key_F), [this] { setFullScreen(!isFullScreen()); });
+    shortcut(QKeySequence(Qt::Key_Escape), [this] { if (isFullScreen()) setFullScreen(false); });
     shortcut(QKeySequence(Qt::Key_J), [this] {
         if (player_->isSeekable()) player_->setPosition(std::max(qint64{0}, player_->position() - 10000));
     });
@@ -114,6 +129,7 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
 }
 
 VideoPlayer::~VideoPlayer() {
+    surface_->removeEventFilter(this);
     disconnect(player_, nullptr, this, nullptr);
     player_->stop();
     player_->setVideoOutput(nullptr);
@@ -122,6 +138,37 @@ VideoPlayer::~VideoPlayer() {
 
 void VideoPlayer::setSource(const QUrl& source) { player_->setSource(source); }
 QSize VideoPlayer::sizeHint() const { return {640, 440}; }
+
+bool VideoPlayer::isFullScreen() const { return surface_->isFullScreen(); }
+
+void VideoPlayer::setFullScreen(bool enabled) {
+    if (enabled == isFullScreen()) return;
+    if (enabled) {
+        previousFocus_ = QApplication::focusWidget();
+        layout()->removeWidget(surface_);
+        surface_->setParent(this, Qt::Window);
+        surface_->showFullScreen();
+        fullscreen_->setFocus(Qt::OtherFocusReason);
+    } else {
+        surface_->hide();
+        surface_->setWindowState(Qt::WindowNoState);
+        surface_->setParent(this, Qt::Widget);
+        layout()->addWidget(surface_);
+        surface_->show();
+        if (previousFocus_) previousFocus_->setFocus(Qt::OtherFocusReason);
+    }
+    fullscreen_->setText(enabled ? tr("Exit fullscreen") : tr("Fullscreen"));
+    emit fullScreenChanged(enabled);
+}
+
+bool VideoPlayer::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == surface_ && event->type() == QEvent::Close && isFullScreen()) {
+        static_cast<QCloseEvent*>(event)->ignore();
+        setFullScreen(false);
+        return true;
+    }
+    return QWidget::eventFilter(watched, event);
+}
 
 void VideoPlayer::updateTransport() {
     const QSignalBlocker blocker(timeline_);
@@ -152,7 +199,7 @@ void VideoPlayer::openFile() {
         fileDialog_->activateWindow();
         return;
     }
-    auto* dialog = new QFileDialog(this, tr("Open video"));
+    auto* dialog = new QFileDialog(surface_, tr("Open video"));
     fileDialog_ = dialog;
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setFileMode(QFileDialog::ExistingFile);
@@ -167,7 +214,7 @@ void VideoPlayer::openFile() {
 }
 
 void VideoPlayer::showSettings() {
-    auto* menu = new QMenu(this);
+    auto* menu = new QMenu(surface_);
     menu->setAttribute(Qt::WA_DeleteOnClose);
     connect(menu->addAction(tr("Open video…")), &QAction::triggered, this, &VideoPlayer::openFile);
     menu->addSeparator();
@@ -217,7 +264,7 @@ void VideoPlayer::showSettings() {
     connect(fill, &QAction::toggled, this, [this](bool enabled) {
         video_->setAspectRatioMode(enabled ? Qt::KeepAspectRatioByExpanding : Qt::KeepAspectRatio);
     });
-    menu->popup(mapToGlobal(QPoint(width() - menu->sizeHint().width(), height())));
+    menu->popup(surface_->mapToGlobal(QPoint(surface_->width() - menu->sizeHint().width(), surface_->height())));
 }
 
 } // namespace shadcn
