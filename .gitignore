@@ -1,14 +1,6 @@
 /build/
 /.tmp/
-/website/node_modules/
-/website/.docusaurus/
-/website/build/
-/docs/api/generated/
-/upstream/.cache/
-/screenshots/
 *.user
-*.pyc
-__pycache__/
 .env
 .env.*
 .DS_Store
