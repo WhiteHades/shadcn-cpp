@@ -284,6 +284,38 @@ void Button::setInvalid(bool invalid) {
     invalid_ = invalid;
     setInvalidProperty(*this, invalid);
 }
+void Button::clearRipples() {
+    for (const auto& ripple : ripples_) delete ripple.animation;
+    ripples_.clear();
+    update();
+}
+void Button::setRippleEnabled(bool enabled) {
+    rippleEnabled_ = enabled;
+    if (!enabled) clearRipples();
+}
+void Button::mousePressEvent(QMouseEvent* event) {
+    // Adapted from starc007/ui-components, components/motion/button/base.tsx.
+    // Copyright (c) 2026 Saurabh Chauhan. See LICENSES/ui-components-MIT.txt.
+    if (rippleEnabled_ && isEnabled() && !reduced(*this) && event->button() == Qt::LeftButton) {
+        auto* animation = new QVariantAnimation(this);
+        animation->setObjectName("shadcnRipple");
+        animation->setStartValue(0.0);
+        animation->setEndValue(1.0);
+        animation->setDuration(1600);
+        QEasingCurve easing(QEasingCurve::BezierSpline);
+        easing.addCubicBezierSegment(QPointF(.16, 1), QPointF(.3, 1), QPointF(1, 1));
+        animation->setEasingCurve(easing);
+        ripples_.push_back({event->position(), std::max(width(), height()) * 2.0, animation});
+        connect(animation, &QVariantAnimation::valueChanged, this, [this] { update(); });
+        connect(animation, &QVariantAnimation::finished, this, [this, animation] {
+            std::erase_if(ripples_, [animation](const auto& ripple) { return ripple.animation == animation; });
+            animation->deleteLater();
+            update();
+        });
+        animation->start();
+    }
+    QPushButton::mousePressEvent(event);
+}
 QSize Button::sizeHint() const {
     const auto m = button_metrics(size_);
     const QFontMetrics fm(buttonFont(*this, size_));
@@ -301,6 +333,9 @@ void Button::updateHover() {
 }
 bool Button::event(QEvent* event) {
     const auto result = QPushButton::event(event);
+    if (event->type() == QEvent::Hide ||
+        (event->type() == QEvent::EnabledChange && !isEnabled()) ||
+        (event->type() == QEvent::StyleChange && reduced(*this))) clearRipples();
     switch (event->type()) {
     case QEvent::Enter: case QEvent::Leave: case QEvent::EnabledChange:
     case QEvent::StyleChange: case QEvent::Hide: updateHover(); break;
@@ -353,6 +388,18 @@ void Button::paintEvent(QPaintEvent*) {
     if (variant_ == Variant::Link && hoverAmount_ > .5 && !visibleText.isEmpty()) {
         const auto y = (height() - fm.height()) / 2 + fm.ascent() + 4;
         painter.drawLine(x, y, x + textWidth, y);
+    }
+    if (!ripples_.empty()) {
+        QPainterPath clip;
+        clip.addRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), radius, radius);
+        painter.setClipPath(clip);
+        painter.setPen(Qt::NoPen);
+        for (const auto& ripple : ripples_) {
+            const auto progress = ripple.animation->currentValue().toDouble();
+            const auto extent = ripple.diameter * (.05 + .95 * progress) / 2;
+            painter.setBrush(alpha(look.text, .3 * (1 - progress)));
+            painter.drawEllipse(ripple.center, extent, extent);
+        }
     }
 }
 

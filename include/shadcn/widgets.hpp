@@ -10,8 +10,10 @@
 #include <QProgressBar>
 #include <QProxyStyle>
 #include <QPushButton>
+#include <QPointF>
 #include <concepts>
 #include <utility>
+#include <vector>
 
 class QApplication;
 class QHBoxLayout;
@@ -56,6 +58,7 @@ T& make_child(QWidget& parent, Args&&... args) {
 class Button : public QPushButton {
     Q_OBJECT
     Q_PROPERTY(bool invalid READ isInvalid WRITE setInvalid)
+    Q_PROPERTY(bool rippleEnabled READ rippleEnabled WRITE setRippleEnabled)
 public:
     explicit Button(const QString& text = {}, QWidget* parent = nullptr);
     [[nodiscard]] Variant variant() const noexcept { return variant_; }
@@ -64,14 +67,22 @@ public:
     void setButtonSize(ButtonSize size);
     [[nodiscard]] bool isInvalid() const noexcept { return invalid_; }
     void setInvalid(bool invalid);
+    /// Optional pointer ripple adapted from UI Components. Disabled by default.
+    [[nodiscard]] bool rippleEnabled() const noexcept { return rippleEnabled_; }
+    void setRippleEnabled(bool enabled);
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 protected:
     void paintEvent(QPaintEvent*) override;
     bool event(QEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
+    void mousePressEvent(QMouseEvent*) override;
 private:
     void updateHover();
+    void clearRipples();
+    struct Ripple { QPointF center; double diameter; QVariantAnimation* animation; };
+    std::vector<Ripple> ripples_;
+    bool rippleEnabled_ = false;
     Variant variant_ = Variant::Default;
     ButtonSize size_ = ButtonSize::Default;
     bool invalid_ = false;

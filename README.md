@@ -49,3 +49,5 @@ layout.addWidget(&button);
 Link `shadcn::widgets`. Qt parents own their child widgets. The [installation guide](https://whitehades.github.io/shadcn-cpp/getting-started) includes a complete application and CMake example. `shadcn::core` is also available without Qt.
 
 MIT. Adapted from [shadcn/ui](https://github.com/shadcn-ui/ui), with its [licence retained](LICENSES/shadcn-MIT.txt). This is an independent port.
+
+Optional button ripple adapted from [UI Components](https://github.com/starc007/ui-components) by Saurabh Chauhan, with its [MIT notice retained](LICENSES/ui-components-MIT.txt).
