@@ -422,23 +422,22 @@ QStringList ToggleGroup::checkedValues() const {
 }
 
 void ToggleGroup::setCheckedValues(const QStringList& values) {
-    for (const auto& toggle : toggles_) {
-        if (!toggle) continue;
+    const auto before = checkedValues();
+    const auto items = toggles_;
+    const QPointer<ToggleGroup> alive(this);
+    QSignalBlocker blocker(this);
+    for (const auto& toggle : items) {
+        if (!toggle || !toggles_.contains(toggle)) continue;
         const auto value = valueFor(*toggle);
         toggle->setChecked(values.contains(value));
-    }
-    if (mode_ == ToggleGroupMode::Single) {
-        auto selected = checkedValues();
-        if (selected.size() > 1) {
-            bool kept = false;
-            for (const auto& toggle : toggles_) {
-                if (!toggle || !toggle->isChecked()) continue;
-                if (kept) toggle->setChecked(false);
-                else kept = true;
-            }
+        if (!alive) {
+            blocker.dismiss();
+            return;
         }
     }
-    emit valuesChanged(checkedValues());
+    blocker.unblock();
+    const auto after = checkedValues();
+    if (after != before) emit valuesChanged(after);
 }
 
 void ToggleGroup::onToggleChanged(Toggle* changed) {
