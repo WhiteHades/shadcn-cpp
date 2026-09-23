@@ -84,6 +84,7 @@ class ToggleGroup : public QWidget {
 public:
     explicit ToggleGroup(Qt::Orientation orientation = Qt::Horizontal,
                          QWidget* parent = nullptr);
+    ~ToggleGroup() override;
     void addToggle(Toggle& toggle, const QString& value = {});
     void removeToggle(Toggle& toggle);
     [[nodiscard]] QList<Toggle*> toggles() const;
@@ -96,7 +97,10 @@ public:
     void setCheckedValues(const QStringList& values);
 signals:
     void valuesChanged(const QStringList& values);
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 private:
+    void updateTabStop(Toggle* preferred = nullptr);
     void onToggleChanged(Toggle* changed);
     QString valueFor(const Toggle& toggle) const;
     QBoxLayout* layout_;
@@ -104,6 +108,7 @@ private:
     QHash<Toggle*, QString> values_;
     Qt::Orientation orientation_;
     ToggleGroupMode mode_ = ToggleGroupMode::Single;
+    bool focusEntered_ = false;
 };
 
 /// A multiline radio group item. Add it to RadioGroup with addItem.

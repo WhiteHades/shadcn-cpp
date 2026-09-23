@@ -256,11 +256,27 @@ ToggleGroup::ToggleGroup(Qt::Orientation orientation, QWidget* parent)
     setFocusPolicy(Qt::NoFocus);
 }
 
+ToggleGroup::~ToggleGroup() {
+    for (const auto& toggle : toggles_) {
+        if (!toggle) continue;
+        toggle->removeEventFilter(this);
+        disconnect(toggle, nullptr, this, nullptr);
+    }
+}
+
 void ToggleGroup::addToggle(Toggle& toggle, const QString& value) {
     if (toggles_.contains(&toggle)) return;
     layout_->addWidget(&toggle);
     values_.insert(&toggle, value.isEmpty() ? toggle.text() : value);
     toggles_.append(QPointer<Toggle>(&toggle));
+    toggle.installEventFilter(this);
+    connect(&toggle, &QObject::destroyed, this, [this, key = &toggle](QObject* destroyed) {
+        values_.remove(key);
+        toggles_.removeIf([destroyed](const auto& item) {
+            return QPointer<QObject>(item).data() == destroyed;
+        });
+        updateTabStop();
+    });
     const QPointer<Toggle> observed(&toggle);
     connect(&toggle, &QAbstractButton::toggled, this, [this, observed](bool) {
         if (observed) onToggleChanged(observed.data());
@@ -270,6 +286,7 @@ void ToggleGroup::addToggle(Toggle& toggle, const QString& value) {
             if (other && other != &toggle) other->setChecked(false);
         }
     }
+    updateTabStop();
 }
 
 void ToggleGroup::removeToggle(Toggle& toggle) {
@@ -277,9 +294,81 @@ void ToggleGroup::removeToggle(Toggle& toggle) {
     layout_->removeWidget(&toggle);
     values_.remove(&toggle);
     toggles_.removeAll(QPointer<Toggle>(&toggle));
+    toggle.removeEventFilter(this);
+    toggle.setFocusPolicy(Qt::StrongFocus);
     toggle.setParent(nullptr);
     toggle.hide();
+    updateTabStop();
     emit valuesChanged(checkedValues());
+}
+
+void ToggleGroup::updateTabStop(Toggle* preferred) {
+    const auto available = [](const Toggle* toggle) {
+        return toggle && toggle->isEnabled() && !toggle->isHidden();
+    };
+    Toggle* entry = available(preferred) ? preferred : nullptr;
+    if (!entry && !focusEntered_) {
+        for (const auto& toggle : toggles_)
+            if (available(toggle) && toggle->isChecked()) { entry = toggle; break; }
+    }
+    if (!entry) {
+        for (const auto& toggle : toggles_) {
+            if (available(toggle) && toggle->focusPolicy() == Qt::StrongFocus) {
+                entry = toggle;
+                break;
+            }
+        }
+    }
+    if (!entry) {
+        for (const auto& toggle : toggles_) {
+            if (available(toggle)) { entry = toggle; break; }
+        }
+    }
+    for (const auto& toggle : toggles_)
+        if (toggle) toggle->setFocusPolicy(toggle == entry ? Qt::StrongFocus : Qt::ClickFocus);
+}
+
+bool ToggleGroup::eventFilter(QObject* watched, QEvent* event) {
+    auto* current = qobject_cast<Toggle*>(watched);
+    if (!current || !toggles_.contains(current)) return QWidget::eventFilter(watched, event);
+    if (event->type() == QEvent::FocusIn) {
+        focusEntered_ = true;
+        updateTabStop(current);
+    }
+    else if (event->type() == QEvent::EnabledChange || event->type() == QEvent::Show ||
+             event->type() == QEvent::Hide) updateTabStop();
+    else if (event->type() == QEvent::KeyPress) {
+        const auto* keyEvent = static_cast<QKeyEvent*>(event);
+        const auto key = keyEvent->key();
+        if (keyEvent->modifiers() != Qt::NoModifier &&
+            (key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up ||
+             key == Qt::Key_Down || key == Qt::Key_Home || key == Qt::Key_End)) {
+            event->ignore();
+            return true;
+        }
+        QList<Toggle*> available;
+        for (const auto& toggle : toggles_)
+            if (toggle && toggle->isEnabled() && !toggle->isHidden()) available.append(toggle);
+        if (available.isEmpty()) return false;
+        qsizetype target = -1;
+        const auto index = available.indexOf(current);
+        if (key == Qt::Key_Home) target = 0;
+        else if (key == Qt::Key_End) target = available.size() - 1;
+        else {
+            int direction = 0;
+            if (orientation_ == Qt::Horizontal && (key == Qt::Key_Right || key == Qt::Key_Left))
+                direction = (key == Qt::Key_Right) != (layoutDirection() == Qt::RightToLeft) ? 1 : -1;
+            if (orientation_ == Qt::Vertical && (key == Qt::Key_Down || key == Qt::Key_Up))
+                direction = key == Qt::Key_Down ? 1 : -1;
+            if (direction) target = (index + direction + available.size()) % available.size();
+        }
+        if (target >= 0) {
+            available.at(target)->setFocus(Qt::OtherFocusReason);
+            event->accept();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 QList<Toggle*> ToggleGroup::toggles() const {
@@ -344,7 +433,7 @@ void ToggleGroup::setCheckedValues(const QStringList& values) {
 }
 
 void ToggleGroup::onToggleChanged(Toggle* changed) {
-    if (!changed) return;
+    if (!changed || !toggles_.contains(changed)) return;
     if (mode_ == ToggleGroupMode::Single && changed->isChecked()) {
         for (const auto& toggle : toggles_) {
             if (toggle && toggle.data() != changed && toggle->isChecked()) {
@@ -353,6 +442,7 @@ void ToggleGroup::onToggleChanged(Toggle* changed) {
             }
         }
     }
+    updateTabStop();
     emit valuesChanged(checkedValues());
 }
 
