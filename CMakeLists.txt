@@ -107,4 +107,4 @@ write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/shadcnConfigVersion
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/shadcnConfig.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/shadcnConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shadcn)
-install(FILES LICENSE LICENSES/shadcn-MIT.txt LICENSES/Inter-OFL.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/shadcn-cpp)
+install(FILES LICENSE LICENSES/shadcn-MIT.txt LICENSES/Geist-OFL.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/shadcn-cpp)

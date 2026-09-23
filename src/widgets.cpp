@@ -242,7 +242,7 @@ void install(QApplication& app, Theme theme, MotionPolicy motion, int fontPixels
     if (fontPixels > 0) {
         static const int fontId = [] {
             initialiseFonts();
-            return QFontDatabase::addApplicationFont(QStringLiteral(":/shadcn/Inter.ttf"));
+            return QFontDatabase::addApplicationFont(QStringLiteral(":/shadcn/Geist.ttf"));
         }();
         auto font = app.font();
         if (fontId >= 0) {
