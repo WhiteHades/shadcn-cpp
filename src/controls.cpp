@@ -124,7 +124,7 @@ Textarea::Textarea(QWidget* parent) : QPlainTextEdit(parent) {
     setViewportMargins(10, 8, 10, 8);
     setMinimumHeight(64);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    setTabChangesFocus(false);
+    setTabChangesFocus(true);
     updatePalette();
 }
 
