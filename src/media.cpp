@@ -11,6 +11,9 @@
 #include <QGraphicsOpacityEffect>
 #include <QPropertyAnimation>
 #include <QTimer>
+#include <QIconEngine>
+#include <QPainter>
+#include <QPainterPath>
 #include <QMediaMetaData>
 #include <QMenu>
 #include <QShortcut>
@@ -20,6 +23,80 @@
 
 namespace shadcn {
 namespace {
+enum class MediaGlyph { Play, Pause, Volume, Muted, Settings, Expand, Collapse };
+
+class MediaIcon final : public QIconEngine {
+public:
+    explicit MediaIcon(MediaGlyph glyph) : glyph_(glyph) {}
+    QIconEngine* clone() const override { return new MediaIcon(glyph_); }
+    QPixmap pixmap(const QSize& size, QIcon::Mode mode, QIcon::State state) override {
+        QPixmap image(size);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        painter.setPen(QApplication::palette().color(QPalette::ButtonText));
+        paint(&painter, QRect(QPoint{}, size), mode, state);
+        return image;
+    }
+    void paint(QPainter* painter, const QRect& rect, QIcon::Mode, QIcon::State) override {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->translate(rect.topLeft());
+        painter->scale(rect.width() / 24., rect.height() / 24.);
+        const auto color = painter->pen().color();
+        painter->setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->setBrush(Qt::NoBrush);
+        QPainterPath path;
+        switch (glyph_) {
+        case MediaGlyph::Play:
+            path.moveTo(7, 4); path.lineTo(20, 12); path.lineTo(7, 20); path.closeSubpath();
+            break;
+        case MediaGlyph::Pause:
+            path.addRoundedRect(QRectF(6, 4, 4, 16), 1, 1);
+            path.addRoundedRect(QRectF(14, 4, 4, 16), 1, 1);
+            break;
+        case MediaGlyph::Volume:
+        case MediaGlyph::Muted:
+            path.moveTo(3, 9); path.lineTo(7, 9); path.lineTo(12, 5); path.lineTo(12, 19);
+            path.lineTo(7, 15); path.lineTo(3, 15); path.closeSubpath();
+            if (glyph_ == MediaGlyph::Muted) {
+                path.moveTo(16, 9); path.lineTo(22, 15);
+                path.moveTo(22, 9); path.lineTo(16, 15);
+            } else {
+                path.moveTo(16, 8); path.cubicTo(19, 10, 19, 14, 16, 16);
+                path.moveTo(19, 5); path.cubicTo(24, 9, 24, 15, 19, 19);
+            }
+            break;
+        case MediaGlyph::Settings:
+            path.moveTo(4, 7); path.lineTo(20, 7);
+            path.moveTo(4, 17); path.lineTo(20, 17);
+            painter->drawPath(path); path = {};
+            painter->setBrush(color);
+            path.addEllipse(QPointF(9, 7), 2, 2);
+            path.addEllipse(QPointF(15, 17), 2, 2);
+            break;
+        case MediaGlyph::Expand:
+        case MediaGlyph::Collapse:
+            for (int x : {0, 1}) for (int y : {0, 1}) {
+                const double cornerX = x ? 20 : 4;
+                const double cornerY = y ? 20 : 4;
+                const double innerX = x ? 15 : 9;
+                const double innerY = y ? 15 : 9;
+                path.moveTo(cornerX, innerY);
+                path.lineTo(glyph_ == MediaGlyph::Expand ? cornerX : innerX,
+                            glyph_ == MediaGlyph::Expand ? cornerY : innerY);
+                path.lineTo(innerX, cornerY);
+            }
+            break;
+        }
+        painter->drawPath(path);
+        painter->restore();
+    }
+private:
+    MediaGlyph glyph_;
+};
+
+QIcon mediaIcon(MediaGlyph glyph) { return QIcon(new MediaIcon(glyph)); }
+
 QString timestamp(qint64 milliseconds) {
     const auto seconds = std::max(qint64{0}, milliseconds) / 1000;
     const auto minutes = seconds / 60;
@@ -80,18 +157,27 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     layout->addWidget(controls_, 0, 0, Qt::AlignBottom);
     auto* transport = new QHBoxLayout;
     transport->setContentsMargins(0, 0, 0, 0);
+    transport->setSpacing(4);
     auto* settings = new Button(tr("Settings"), this);
     settings->setObjectName(QStringLiteral("videoSettings"));
     for (auto* button : {play_, mute_, settings, fullscreen_}) {
         button->setVariant(Variant::Ghost);
-        button->setButtonSize(ButtonSize::Sm);
+        button->setButtonSize(ButtonSize::IconSm);
+        button->setToolTip(button->text());
     }
+    play_->setIcon(mediaIcon(MediaGlyph::Play));
+    mute_->setIcon(mediaIcon(MediaGlyph::Volume));
+    settings->setIcon(mediaIcon(MediaGlyph::Settings));
+    fullscreen_->setIcon(mediaIcon(MediaGlyph::Expand));
     play_->setObjectName(QStringLiteral("videoPlay"));
     volume_->setAccessibleName(tr("Volume"));
     volume_->setSingleStep(.05);
     volume_->setPageStep(.1);
-    volume_->setFixedWidth(80);
+    volume_->setMinimumWidth(32);
+    volume_->setMaximumWidth(80);
     volume_->setValues({.75});
+    time_->setObjectName(QStringLiteral("videoTime"));
+    time_->setWordWrap(true);
     transport->addWidget(play_);
     transport->addWidget(time_);
     transport->addStretch();
@@ -151,6 +237,8 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     });
     connect(audio_, &QAudioOutput::mutedChanged, this, [this](bool muted) {
         mute_->setText(muted ? tr("Unmute") : tr("Mute"));
+        mute_->setToolTip(mute_->text());
+        mute_->setIcon(mediaIcon(muted ? MediaGlyph::Muted : MediaGlyph::Volume));
     });
     connect(player_, &QMediaPlayer::positionChanged, this, &VideoPlayer::updateTransport);
     connect(player_, &QMediaPlayer::durationChanged, this, &VideoPlayer::updateTransport);
@@ -210,6 +298,8 @@ void VideoPlayer::setFullScreen(bool enabled) {
         if (previousFocus_) previousFocus_->setFocus(Qt::OtherFocusReason);
     }
     fullscreen_->setText(enabled ? tr("Exit fullscreen") : tr("Fullscreen"));
+    fullscreen_->setToolTip(fullscreen_->text());
+    fullscreen_->setIcon(mediaIcon(enabled ? MediaGlyph::Collapse : MediaGlyph::Expand));
     emit fullScreenChanged(enabled);
 }
 
@@ -238,7 +328,12 @@ void VideoPlayer::updateTransport() {
     timeline_->setValues({static_cast<double>(player_->position())});
     timeline_->setEnabled(player_->isSeekable());
     time_->setText(timestamp(player_->position()) + QStringLiteral(" / ") + timestamp(player_->duration()));
-    play_->setText(player_->isPlaying() ? tr("Pause") : tr("Play"));
+    const auto playLabel = player_->isPlaying() ? tr("Pause") : tr("Play");
+    if (play_->text() != playLabel) {
+        play_->setText(playLabel);
+        play_->setToolTip(playLabel);
+        play_->setIcon(mediaIcon(player_->isPlaying() ? MediaGlyph::Pause : MediaGlyph::Play));
+    }
     const auto state = player_->mediaStatus();
     play_->setEnabled(state != QMediaPlayer::NoMedia && state != QMediaPlayer::InvalidMedia);
     QString message;
