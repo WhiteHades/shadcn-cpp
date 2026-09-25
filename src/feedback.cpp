@@ -587,10 +587,11 @@ int AttachmentGroup::count() const { return layout_->count(); }
 Bubble::Bubble(const QString& text, QWidget* parent) : QFrame(parent), text_(new QLabel(text, this)),
     content_(new QVBoxLayout(this)) {
     setFrameStyle(QFrame::NoFrame);
-    setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     setAccessibleName(text);
     content_->setContentsMargins(12, 8, 12, 8);
     content_->setSpacing(4);
+    text_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     text_->setWordWrap(true);
     text_->setTextFormat(Qt::PlainText);
     content_->addWidget(text_);
@@ -621,6 +622,11 @@ void Bubble::setAlign(BubbleAlign align) {
 void Bubble::addWidget(QWidget& widget) { content_->addWidget(&widget); }
 QVBoxLayout& Bubble::content() { return *content_; }
 QSize Bubble::sizeHint() const { return content_->sizeHint(); }
+bool Bubble::hasHeightForWidth() const { return content_->hasHeightForWidth(); }
+int Bubble::heightForWidth(int width) const {
+    if (width <= 0) return sizeHint().height();
+    return content_->totalHeightForWidth(width);
+}
 
 void Bubble::paintEvent(QPaintEvent*) {
     QPainter painter(this);

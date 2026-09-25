@@ -201,6 +201,8 @@ public:
     void addWidget(QWidget& widget);
     [[nodiscard]] QVBoxLayout& content();
     QSize sizeHint() const override;
+    bool hasHeightForWidth() const override;
+    int heightForWidth(int width) const override;
 protected:
     void paintEvent(QPaintEvent*) override;
 private:

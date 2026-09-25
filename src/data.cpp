@@ -146,9 +146,13 @@ void Select::showPopup() {
         QString("QAbstractItemView { background: %1; color: %2; border: 1px solid %3; "
                 "border-radius: 8px; padding: 4px; outline: 0; } QAbstractItemView::item { "
                 "min-height: 24px; padding: 2px 8px; border-radius: 6px; } "
-                "QAbstractItemView::item:selected { background: %4; color: %2; }")
+                "QAbstractItemView::item:selected { background: %4; color: %2; } "
+                "QScrollBar:vertical { width: 8px; background: transparent; margin: 4px 2px; } "
+                "QScrollBar::handle:vertical { background: %5; border-radius: 3px; min-height: 24px; } "
+                "QScrollBar::add-line, QScrollBar::sub-line { height: 0; } "
+                "QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }")
             .arg(css(*this, Role::Popover), css(*this, Role::Foreground), css(*this, Role::Border),
-                 css(*this, Role::Accent)));
+                 css(*this, Role::Accent), css(*this, Role::Muted)));
     NativeSelect::showPopup();
 }
 Combobox::Combobox(QWidget* parent) : Select(parent) {
@@ -169,6 +173,8 @@ void Combobox::setPlaceholderText(const QString& text) {
 Command::Command(QWidget* parent)
     : QWidget(parent), search_(new Input(this)), list_(new QListWidget(this)),
       empty_(new QLabel(tr("No results found."), this)) {
+    setObjectName(QStringLiteral("shadcnCommand"));
+    setAttribute(Qt::WA_StyledBackground);
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(4);
@@ -259,11 +265,13 @@ bool Command::eventFilter(QObject* object, QEvent* event) {
     return QWidget::eventFilter(object, event);
 }
 void Command::refreshTheme() {
-    list_->setStyleSheet(QString("QListWidget { background: %1; color: %2; border: none; outline: "
-                                 "0; } QListWidget::item { padding: 6px 8px; border-radius: 6px; } "
-                                 "QListWidget::item:selected { background: %3; color: %2; }")
-                             .arg(css(*this, Role::Popover), css(*this, Role::Foreground),
-                                  css(*this, Role::Accent)));
+    const auto sheet = QString("QWidget#shadcnCommand { background: %1; border: 1px solid %4; "
+                           "border-radius: 8px; } QListWidget { background: transparent; color: %2; "
+                           "border: none; outline: 0; } QListWidget::item { padding: 6px 8px; "
+                           "border-radius: 6px; } QListWidget::item:selected { background: %3; color: %2; }")
+                       .arg(css(*this, Role::Popover), css(*this, Role::Foreground),
+                            css(*this, Role::Accent), css(*this, Role::Border));
+    if (styleSheet() != sheet) setStyleSheet(sheet);
 }
 void Command::changeEvent(QEvent* event) {
     QWidget::changeEvent(event);
@@ -318,7 +326,8 @@ void Calendar::refreshTheme() {
             child->setStyleSheet(
                 QString("QWidget#qt_calendar_navigationbar { background: %1; } QToolButton { "
                         "background: transparent; color: %2; border: none; border-radius: 6px; "
-                        "padding: 4px; } QToolButton:hover { background: %3; }")
+                        "padding: 4px; } QToolButton#qt_calendar_monthbutton { padding-right: 18px; } "
+                        "QToolButton:hover { background: %3; }")
                     .arg(css(*this, Role::Background), css(*this, Role::Foreground),
                          css(*this, Role::Muted)));
     }
@@ -931,6 +940,10 @@ void Chart::mouseMoveEvent(QMouseEvent* event) {
         if (index < series.values.size()) lines << series.name + ": " + QString::number(series.values[index]);
         if (type_ == ChartType::Pie) break;
     }
+    auto palette = QToolTip::palette();
+    palette.setColor(QPalette::ToolTipBase, colour(*this, Role::Popover));
+    palette.setColor(QPalette::ToolTipText, colour(*this, Role::PopoverForeground));
+    QToolTip::setPalette(palette);
     QToolTip::showText(event->globalPosition().toPoint(), lines.join('\n'), this);
 }
 void Chart::leaveEvent(QEvent* event) {
