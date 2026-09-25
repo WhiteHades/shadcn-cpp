@@ -861,10 +861,14 @@ double Slider::valueAt(const QPointF& point) const {
         fraction = (track.bottom() - point.y()) / std::max(1.0, track.height());
     if (orientation_ == Qt::Horizontal && layoutDirection() == Qt::RightToLeft)
         fraction = 1.0 - fraction;
-    const auto value = std::lerp(minimum_, maximum_, std::clamp(fraction, 0.0, 1.0));
+    return std::clamp(snappedValue(std::lerp(minimum_, maximum_, std::clamp(fraction, 0.0, 1.0))),
+                      minimum_, maximum_);
+}
+
+double Slider::snappedValue(double value) const {
     const auto steps = (value - minimum_) / singleStep_;
     if (!std::isfinite(steps)) return value;
-    return std::clamp(std::fma(std::round(steps), singleStep_, minimum_), minimum_, maximum_);
+    return std::fma(std::round(steps), singleStep_, minimum_);
 }
 
 int Slider::thumbAt(const QPointF& point) const {
@@ -995,12 +999,15 @@ bool Slider::event(QEvent* event) {
 void Slider::keyPressEvent(QKeyEvent* event) {
     if (!isEnabled() || values_.isEmpty()) return;
     auto index = activeThumb_ >= 0 ? activeThumb_ : 0;
-    auto value = values_[index];
-    const auto direction = (orientation_ == Qt::Horizontal && layoutDirection() == Qt::RightToLeft) ? -1 : 1;
-    if (event->key() == Qt::Key_Left || event->key() == Qt::Key_Down) value -= singleStep_ * direction;
-    else if (event->key() == Qt::Key_Right || event->key() == Qt::Key_Up) value += singleStep_ * direction;
-    else if (event->key() == Qt::Key_PageDown) value -= pageStep_ * direction;
-    else if (event->key() == Qt::Key_PageUp) value += pageStep_ * direction;
+    auto value = snappedValue(values_[index]);
+    const auto step = event->modifiers().testFlag(Qt::ShiftModifier) ? pageStep_ : singleStep_;
+    const auto direction = layoutDirection() == Qt::RightToLeft ? -1 : 1;
+    if (event->key() == Qt::Key_Left) value -= step * direction;
+    else if (event->key() == Qt::Key_Right) value += step * direction;
+    else if (event->key() == Qt::Key_Down) value -= step;
+    else if (event->key() == Qt::Key_Up) value += step;
+    else if (event->key() == Qt::Key_PageDown) value -= pageStep_;
+    else if (event->key() == Qt::Key_PageUp) value += pageStep_;
     else if (event->key() == Qt::Key_Home) value = minimum_;
     else if (event->key() == Qt::Key_End) value = maximum_;
     else { QWidget::keyPressEvent(event); return; }

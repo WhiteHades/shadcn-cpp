@@ -190,6 +190,7 @@ private:
     void updateAccessibleValue();
     QRectF trackRect() const;
     double valueAt(const QPointF& point) const;
+    double snappedValue(double value) const;
     double positionFor(double value) const;
     int thumbAt(const QPointF& point) const;
     void setValueAt(int index, double value, bool push = false);
