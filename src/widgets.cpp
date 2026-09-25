@@ -170,12 +170,12 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing);
         const auto origin = target_->mapTo(parentWidget(), QPoint(0, 0)) - pos();
         auto bounds = QRectF(QPointF(origin), QSizeF(target_->size()));
-        bounds.adjust(-1.5, -1.5, 1.5, 1.5);
+        bounds.adjust(-.75, -.75, .75, .75);
         const auto radius = std::min(radiusFor(*target_),
                                     std::min(target_->width(), target_->height()) / 2.0);
-        painter.setPen(QPen(focusColor(*target_), 3));
+        painter.setPen(QPen(focusColor(*target_), 1.5));
         painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(bounds, radius + 1.5, radius + 1.5);
+        painter.drawRoundedRect(bounds, radius + .75, radius + .75);
     }
 private:
     QPointer<QWidget> target_;
@@ -729,7 +729,7 @@ void Card::updateHeader() {
 void Card::setTitle(const QString& title) { title_->setText(title); updateHeader(); }
 void Card::setDescription(const QString& description) { description_->setText(description); updateHeader(); }
 QVBoxLayout& Card::content() { contentHost_->show(); return *content_; }
-QHBoxLayout& Card::footer() { footerHost_->show(); layout()->setContentsMargins(0,16,0,0); return *footer_; }
+QHBoxLayout& Card::footer() { footerHost_->show(); return *footer_; }
 QVBoxLayout& Card::action() { actionHost_->show(); header_->show(); return *action_; }
 void Card::changeEvent(QEvent* event) {
     QFrame::changeEvent(event);

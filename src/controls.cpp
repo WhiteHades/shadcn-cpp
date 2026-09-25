@@ -1266,6 +1266,8 @@ QPushButton& Breadcrumb::addLink(const QString& text) {
     button->setCursor(Qt::PointingHandCursor);
     button->setFocusPolicy(Qt::StrongFocus);
     button->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    button->setFixedHeight(24);
+    button->setStyleSheet(QStringLiteral("QPushButton { border: 0; padding: 0; background: transparent; }"));
     auto palette = button->palette();
     palette.setColor(QPalette::ButtonText, muted(*this));
     button->setPalette(palette);
@@ -1280,6 +1282,8 @@ QPushButton& Breadcrumb::addLink(const QString& text) {
 QLabel& Breadcrumb::addPage(const QString& text) {
     auto* label = new QLabel(text, this);
     label->setTextFormat(Qt::PlainText);
+    label->setAlignment(Qt::AlignVCenter);
+    label->setMinimumHeight(24);
     label->setAccessibleName(QStringLiteral("Current page: ") + text);
     label->setStyleSheet(QStringLiteral("font-weight:500;"));
     auto palette = label->palette();
@@ -1292,6 +1296,8 @@ QLabel& Breadcrumb::addPage(const QString& text) {
 QLabel& Breadcrumb::addSeparator(const QString& text) {
     auto* label = new QLabel(text, this);
     label->setTextFormat(Qt::PlainText);
+    label->setAlignment(Qt::AlignVCenter);
+    label->setMinimumHeight(24);
     label->setAccessibleName(QStringLiteral("Breadcrumb separator"));
     label->setAccessibleDescription(QStringLiteral("Presentation only"));
     auto palette = label->palette();

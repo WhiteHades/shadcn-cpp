@@ -53,7 +53,8 @@ int motionDuration(const QWidget& widget, int full = 180) {
 }
 
 QString rgb(const QColor& color) {
-    return QStringLiteral("rgb(%1,%2,%3)").arg(color.red()).arg(color.green()).arg(color.blue());
+    return QStringLiteral("rgba(%1,%2,%3,%4)")
+        .arg(color.red()).arg(color.green()).arg(color.blue()).arg(color.alpha());
 }
 
 QIcon accordionIcon(const QWidget& owner, bool expanded) {
