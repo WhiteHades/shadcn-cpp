@@ -179,7 +179,8 @@ void Dialog::transition(double target) {
     animation_->setDuration(reduced(*this) ? 0 : duration_);
     animation_->setStartValue(amount_);
     animation_->setEndValue(target);
-    animation_->setEasingCurve(QEasingCurve::InOutCubic);
+    animation_->setEasingCurve(qobject_cast<Drawer*>(this) ? QEasingCurve::OutCubic
+                                                          : QEasingCurve::InOutCubic);
     animation_->start();
 }
 void Dialog::showEvent(QShowEvent* event) {
@@ -309,6 +310,7 @@ Drawer::Drawer(QWidget* parent) : Sheet(Side::Bottom, parent), handle_(new QFram
     setCloseButtonVisible(false);
     refreshTheme();
 }
+QPoint Drawer::animationOffset() const { return {0, panelGeometry().height()}; }
 bool Drawer::eventFilter(QObject* object, QEvent* event) {
     if (object == handle_) {
         if (event->type() == QEvent::MouseButtonPress) {
@@ -324,7 +326,9 @@ bool Drawer::eventFilter(QObject* object, QEvent* event) {
             const int delta =
                 std::max(0, static_cast<QMouseEvent*>(event)->globalPosition().toPoint().y() -
                                 dragStart_.y());
-            panel_->move(dragGeometry_.topLeft() + QPoint(0, delta));
+            amount_ = 1.0 - std::clamp(double(delta) / std::max(1, dragGeometry_.height()), 0.0, 1.0);
+            arrangePanel();
+            update();
             return true;
         } else if (event->type() == QEvent::MouseButtonRelease && dragging_) {
             dragging_ = false;
@@ -332,7 +336,7 @@ bool Drawer::eventFilter(QObject* object, QEvent* event) {
             if (delta > dragGeometry_.height() / 3 || (delta > 30 && dragTime_.elapsed() < 200))
                 reject();
             else
-                arrangePanel();
+                transition(1);
             return true;
         }
     }

@@ -40,14 +40,15 @@ class Dialog : public QDialog {
     virtual QPoint animationOffset() const { return {}; }
     void arrangePanel();
     void refreshTheme();
+    void transition(double target);
     QFrame* panel_;
     QVBoxLayout* panelLayout_;
     int contentWidth_ = 384;
     int duration_ = 100;
+    double amount_ = 1;
 
   private:
     void fitOwner();
-    void transition(double target);
     QLabel* title_;
     QLabel* description_;
     Button* close_;
@@ -58,7 +59,6 @@ class Dialog : public QDialog {
     QPointer<QWidget> owner_;
     QVariantAnimation* animation_;
     QGraphicsOpacityEffect* opacity_;
-    double amount_ = 1;
     int result_ = Rejected;
     bool closing_ = false;
     bool outsideDismiss_ = true;
@@ -104,6 +104,7 @@ class Drawer : public Sheet {
 
   protected:
     bool eventFilter(QObject*, QEvent*) override;
+    QPoint animationOffset() const override;
 
   private:
     QWidget* handle_;
