@@ -2,6 +2,8 @@
 // Design source: shadcn-ui/ui radix-nova wrappers and style-nova.css.
 #include <shadcn/navigation.hpp>
 
+#include "glyphs.hpp"
+
 #include <QApplication>
 #include <QContextMenuEvent>
 #include <QEvent>
@@ -912,9 +914,10 @@ bool SidebarProvider::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
 }
 
-SidebarTrigger::SidebarTrigger(QWidget* parent) : Button(QString::fromUtf8("☰"), parent) {
+SidebarTrigger::SidebarTrigger(QWidget* parent) : Button({}, parent) {
     setVariant(Variant::Ghost);
     setButtonSize(ButtonSize::IconSm);
+    setIcon(detail::glyph(detail::Glyph::PanelLeft));
     setAccessibleName(tr("Toggle sidebar"));
     connect(this, &Button::clicked, this, [this] {
         auto* ancestor = parentWidget();
@@ -1204,16 +1207,20 @@ bool ContextMenu::eventFilter(QObject* watched, QEvent* event) {
 
 Carousel::Carousel(Qt::Orientation orientation, QWidget* parent)
     : QFrame(parent), orientation_(orientation), stack_(new QStackedWidget(this)),
-      previous_(new Button(QString::fromUtf8("‹"), this)), next_(new Button(QString::fromUtf8("›"), this)) {
+      previous_(new Button({}, this)), next_(new Button({}, this)) {
     auto* outer = new QBoxLayout(orientation == Qt::Horizontal ? QBoxLayout::LeftToRight
                                                                 : QBoxLayout::TopToBottom,
                                  this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(8);
     previous_->setVariant(Variant::Outline);
-    previous_->setButtonSize(ButtonSize::IconSm);
+    previous_->setButtonSize(ButtonSize::Icon);
+    previous_->setProperty("shadcnRadius", button_metrics(ButtonSize::Icon).height / 2);
+    previous_->setIcon(detail::glyph(detail::Glyph::ChevronLeft));
     next_->setVariant(Variant::Outline);
-    next_->setButtonSize(ButtonSize::IconSm);
+    next_->setButtonSize(ButtonSize::Icon);
+    next_->setProperty("shadcnRadius", button_metrics(ButtonSize::Icon).height / 2);
+    next_->setIcon(detail::glyph(detail::Glyph::ChevronRight));
     previous_->setAccessibleName(tr("Previous slide"));
     next_->setAccessibleName(tr("Next slide"));
     stack_->setFocusPolicy(Qt::StrongFocus);
@@ -1350,7 +1357,7 @@ void Pagination::setNextText(const QString& text) {
 void Pagination::rebuild() {
     while (layout_->count() > 0) {
         auto* item = layout_->takeAt(0);
-        if (item->widget()) item->widget()->deleteLater();
+        if (auto* widget = item->widget()) { widget->hide(); widget->deleteLater(); }
         delete item;
     }
     const auto addPage = [this](int page) {

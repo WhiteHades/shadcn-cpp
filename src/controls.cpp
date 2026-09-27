@@ -1311,7 +1311,7 @@ QLabel& Breadcrumb::addEllipsis() { return addSeparator(QStringLiteral("…")); 
 
 void Breadcrumb::clear() {
     while (auto* item = layout_->takeAt(0)) {
-        if (auto* widget = item->widget()) widget->deleteLater();
+        if (auto* widget = item->widget()) { widget->hide(); widget->deleteLater(); }
         delete item;
     }
 }

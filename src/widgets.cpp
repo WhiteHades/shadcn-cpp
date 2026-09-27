@@ -373,7 +373,9 @@ void Button::paintEvent(QPaintEvent*) {
     painter.setFont(font);
     painter.setPen(look.text);
     const QFontMetrics fm(font);
-    const auto visibleText = m.iconOnly ? QString{} : text();
+    // An icon size gives a square button. Its label only disappears behind an icon, so a
+    // numbered control such as a pagination page keeps its text.
+    const auto visibleText = m.iconOnly && !icon().isNull() ? QString{} : text();
     const auto textWidth = fm.size(Qt::TextShowMnemonic, visibleText).width();
     const auto iconWidth = icon().isNull() ? 0 : static_cast<int>(m.iconSize);
     const auto gap = iconWidth && !visibleText.isEmpty() ? static_cast<int>(m.gap) : 0;

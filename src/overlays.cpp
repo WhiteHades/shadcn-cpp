@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Adapted from shadcn/ui Radix components and Nova styles.
+#include "glyphs.hpp"
+
 #include <QApplication>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
@@ -132,15 +134,7 @@ void Dialog::refreshTheme() {
     footerHost_->setStyleSheet(sheet ? QString{} :
         QString("QFrame#shadcnDialogFooter { background: %1; border-top: 1px solid %2; border-bottom-left-radius: %3px; border-bottom-right-radius: %3px; }")
             .arg(fill, css(*this, Role::Border)).arg(radius));
-    QPixmap image(32, 32);
-    image.fill(Qt::transparent);
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(colour(*this, Role::Foreground), 3, Qt::SolidLine, Qt::RoundCap));
-    painter.drawLine(9, 9, 23, 23);
-    painter.drawLine(23, 9, 9, 23);
-    painter.end();
-    close_->setIcon(QIcon(image));
+    close_->setIcon(detail::glyph(detail::Glyph::Close));
     auto p = description_->palette();
     p.setColor(QPalette::WindowText, colour(*this, Role::MutedForeground));
     description_->setPalette(p);
