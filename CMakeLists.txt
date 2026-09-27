@@ -115,6 +115,46 @@ if(SHADCN_BUILD_TESTS)
             add_test(NAME ${group} COMMAND shadcn_${group}_test)
             set_tests_properties(${group} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         endforeach()
+        if(SHADCN_BUILD_MEDIA)
+            # The media cases decode real frames, so they need a fixture. Generate it once at
+            # configure time when ffmpeg is present; otherwise the suite reports the gap
+            # instead of silently passing.
+            set(shadcn_media_fixture "${CMAKE_CURRENT_BINARY_DIR}/media/fixture.mkv")
+            find_program(SHADCN_FFMPEG ffmpeg)
+            if(SHADCN_FFMPEG)
+                file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/media")
+                file(GLOB shadcn_media_subtitles "${CMAKE_CURRENT_SOURCE_DIR}/tests/media/captions.srt")
+                if(shadcn_media_subtitles)
+                    execute_process(
+                        COMMAND "${SHADCN_FFMPEG}" -y -loglevel error
+                            -f lavfi -i testsrc2=size=320x180:rate=24:duration=6
+                            -f lavfi -i sine=frequency=440:duration=6
+                            -i "${shadcn_media_subtitles}"
+                            -c:v libvpx-vp9 -b:v 300k -c:a libopus -b:a 64k -c:s srt
+                            -metadata:s:s:0 language=eng
+                            "${shadcn_media_fixture}"
+                        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                        RESULT_VARIABLE shadcn_media_result
+                        OUTPUT_QUIET ERROR_QUIET)
+                    if(NOT shadcn_media_result EQUAL 0)
+                        file(REMOVE "${shadcn_media_fixture}")
+                    endif()
+                endif()
+            endif()
+            add_executable(shadcn_media_test tests/media_test.cpp)
+            set_target_properties(shadcn_media_test PROPERTIES AUTOMOC ON)
+            shadcn_target(shadcn_media_test)
+            target_link_libraries(shadcn_media_test PRIVATE shadcn::media Qt6::Test)
+            add_test(NAME media COMMAND shadcn_media_test)
+            # The offscreen plugin decodes media but cannot present frames, so the cases that
+            # need a real renderer report a skip. Point this at a virtual display such as
+            # Xvfb to run the whole suite: cmake -DSHADCN_MEDIA_PLATFORM=xcb.
+            set(SHADCN_MEDIA_PLATFORM "offscreen" CACHE STRING
+                "Qt platform plugin for the media suite")
+            set_tests_properties(media PROPERTIES
+                ENVIRONMENT "QT_QPA_PLATFORM=${SHADCN_MEDIA_PLATFORM};SHADCN_TEST_VIDEO=${shadcn_media_fixture}"
+                TIMEOUT 300)
+        endif()
     endif()
 endif()
 
