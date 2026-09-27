@@ -3,6 +3,7 @@
 #include <shadcn/feedback.hpp>
 
 #include <shadcn/controls.hpp>
+#include <shadcn/navigation.hpp>
 #include <shadcn/widgets.hpp>
 
 #include <QAccessible>
@@ -795,7 +796,7 @@ MessageScrollerButton::MessageScrollerButton(Direction direction, QWidget* paren
                                                  : QStringLiteral("Scroll to start"));
 }
 
-MessageScroller::MessageScroller(QWidget* parent) : QFrame(parent), area_(new QScrollArea(this)),
+MessageScroller::MessageScroller(QWidget* parent) : QFrame(parent), area_(new ScrollArea(this)),
     contentHost_(new QWidget), content_(new QVBoxLayout(contentHost_)),
     startButton_(new MessageScrollerButton(MessageScrollerButton::Direction::Start, this)),
     endButton_(new MessageScrollerButton(MessageScrollerButton::Direction::End, this)) {

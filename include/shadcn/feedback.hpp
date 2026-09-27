@@ -25,6 +25,8 @@ class QVBoxLayout;
 
 namespace shadcn {
 
+class ScrollArea;
+
 enum class ToastType { Default, Success, Info, Warning, Error, Loading };
 enum class ToastPosition { Top, TopRight, TopLeft, Bottom, BottomRight, BottomLeft };
 
@@ -330,7 +332,7 @@ public:
     void setAutoScroll(bool enabled);
     [[nodiscard]] bool autoScroll() const noexcept { return autoScroll_; }
     [[nodiscard]] QVBoxLayout& content();
-    [[nodiscard]] QScrollArea& viewport() { return *area_; }
+    [[nodiscard]] ScrollArea& viewport() { return *area_; }
 signals:
     void startVisibilityChanged(bool visible);
     void endVisibilityChanged(bool visible);
@@ -338,7 +340,7 @@ protected:
     bool eventFilter(QObject*, QEvent*) override;
 private:
     void updateButtons();
-    QScrollArea* area_;
+    ScrollArea* area_;
     QWidget* contentHost_;
     QVBoxLayout* content_;
     MessageScrollerButton* startButton_;
