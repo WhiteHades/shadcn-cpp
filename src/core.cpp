@@ -70,7 +70,22 @@ double CubicBezier::sample(double progress) const noexcept {
     if (progress <= 0) return 0;
     if (progress >= 1) return 1;
     // Invert x(t) before evaluating y(t). Sampling y(progress) is incorrect.
-    // A fixed iteration count bounds work and handles flat endpoint derivatives.
+    // Newton-Raphson converges in a few steps for the well conditioned curves. The
+    // bracketing bisection stays as a fallback where the derivative is too small to trust,
+    // so a flat endpoint still terminates instead of dividing by a near zero slope.
+    auto t = progress;
+    for (int i = 0; i < 8; ++i) {
+        const auto other = 1 - t;
+        const auto x = 3 * other * other * t * x1_ + 3 * other * t * t * x2_ + t * t * t;
+        const auto error = x - progress;
+        if (std::abs(error) < 1e-7) return bezier(t, y1_, y2_);
+        // dx/dt for the cubic with control points (0, x1, x2, 1).
+        const auto slope = 3 * other * other * x1_ + 6 * other * t * (x2_ - x1_) +
+                           3 * t * t * (1 - x2_);
+        if (std::abs(slope) < 1e-6) break;
+        t -= error / slope;
+        if (t <= 0 || t >= 1) break;
+    }
     double low = 0, high = 1;
     for (int i = 0; i < 32; ++i) {
         const auto middle = (low + high) / 2;

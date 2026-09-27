@@ -77,11 +77,18 @@ protected:
     bool event(QEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
+    void changeEvent(QEvent*) override;
 private:
     void updateHover();
     void clearRipples();
+    /// Measures the visible label once and reuses it until the text, font or size changes.
+    int labelWidth() const;
     struct Ripple { QPointF center; double diameter; QVariantAnimation* animation; };
     std::vector<Ripple> ripples_;
+    mutable int labelWidth_ = -1;
+    mutable QString labelText_;
+    mutable QFont labelFont_;
+    mutable ButtonSize labelSize_ = ButtonSize::Default;
     bool rippleEnabled_ = false;
     Variant variant_ = Variant::Default;
     ButtonSize size_ = ButtonSize::Default;

@@ -47,7 +47,8 @@ int main(int argc, char** argv) {
             return 1;
         for (const auto& name : names) {
             auto* preview = gallery::demo(name);
-            preview->resize(640, name == "card" ? 360 : 300);
+            // 16:9 matches the catalogue tile aspect ratio, so no capture is cropped.
+            preview->resize(640, 360);
             preview->show();
             QApplication::processEvents();
             preview->setFocusPolicy(Qt::ClickFocus);

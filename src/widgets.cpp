@@ -277,6 +277,7 @@ void Button::setVariant(Variant variant) {
 void Button::setButtonSize(ButtonSize size) {
     if (size_ == size) return;
     size_ = size;
+    labelWidth_ = -1;
     updateGeometry();
     update();
 }
@@ -327,13 +328,32 @@ QSize Button::sizeHint() const {
     if (m.iconOnly) return {height, height};
     const auto hasIcon = !icon().isNull();
     const auto padding = hasIcon ? m.iconPadding + m.padding : m.padding * 2;
-    const auto textWidth = fm.size(Qt::TextShowMnemonic, text()).width();
+    // An icon size returns above, so the cached measurement is this label.
+    const auto textWidth = labelWidth();
     const auto content = textWidth + (hasIcon ? static_cast<int>(m.iconSize + (text().isEmpty() ? 0 : m.gap)) : 0);
     return {content + static_cast<int>(padding) + 2, height};
 }
 QSize Button::minimumSizeHint() const { return sizeHint(); }
 void Button::updateHover() {
     animate(*hover_, *this, hoverAmount_, isEnabled() && underMouse() ? 1 : 0);
+}
+int Button::labelWidth() const {
+    // Shaping a string is the most expensive step in painting a button, and the label only
+    // changes when its text, font or size does. Measure once and reuse the result.
+    const auto font = buttonFont(*this, size_);
+    if (labelWidth_ >= 0 && labelText_ == text() && labelFont_ == font && labelSize_ == size_)
+        return labelWidth_;
+    const auto visible = button_metrics(size_).iconOnly && !icon().isNull() ? QString{} : text();
+    labelWidth_ = QFontMetrics(font).size(Qt::TextShowMnemonic, visible).width();
+    labelText_ = text();
+    labelFont_ = font;
+    labelSize_ = size_;
+    return labelWidth_;
+}
+void Button::changeEvent(QEvent* event) {
+    // A font or palette change alters both the label measurement and the resolved radius.
+    labelWidth_ = -1;
+    QPushButton::changeEvent(event);
 }
 bool Button::event(QEvent* event) {
     const auto result = QPushButton::event(event);
@@ -376,7 +396,7 @@ void Button::paintEvent(QPaintEvent*) {
     // An icon size gives a square button. Its label only disappears behind an icon, so a
     // numbered control such as a pagination page keeps its text.
     const auto visibleText = m.iconOnly && !icon().isNull() ? QString{} : text();
-    const auto textWidth = fm.size(Qt::TextShowMnemonic, visibleText).width();
+    const auto textWidth = labelWidth();
     const auto iconWidth = icon().isNull() ? 0 : static_cast<int>(m.iconSize);
     const auto gap = iconWidth && !visibleText.isEmpty() ? static_cast<int>(m.gap) : 0;
     const auto total = textWidth + iconWidth + gap;
