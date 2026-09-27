@@ -380,7 +380,11 @@ void Popover::positionPopup() {
     const auto available = anchor_->screen()->availableGeometry().adjusted(4, 4, -4, -4);
     setFixedWidth(std::min(contentWidth_, available.width()));
     adjustSize();
-    resize(width(), std::min(sizeHint().height(), available.height()));
+    // Wrapping content needs its height for this width, not the unwrapped size hint.
+    auto wanted = sizeHint().height();
+    if (const auto* box = qobject_cast<QBoxLayout*>(layout()); box && box->hasHeightForWidth())
+        wanted = std::max(wanted, box->heightForWidth(width()));
+    resize(width(), std::min(wanted, available.height()));
     const QRect anchor(anchor_->mapToGlobal(QPoint{}), anchor_->size());
     auto location = [&](Side side) {
         switch (side) {
