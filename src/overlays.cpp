@@ -199,6 +199,17 @@ void Dialog::hideEvent(QHideEvent* event) {
     if (previousFocus_ && previousFocus_->isVisible() && previousFocus_->isEnabled())
         previousFocus_->setFocus(Qt::PopupFocusReason);
 }
+void Dialog::open() {
+    // A close animation is still running, so the dialog is visible and no show event will
+    // arrive to restart the opening transition. Cancel the pending close here, otherwise a
+    // rapid reopen fades the dialog out and then hides it anyway.
+    if (closing_) {
+        closing_ = false;
+        animation_->stop();
+        transition(1);
+    }
+    QDialog::open();
+}
 void Dialog::done(int result) {
     if (!isVisible() || reduced(*this)) {
         animation_->stop();

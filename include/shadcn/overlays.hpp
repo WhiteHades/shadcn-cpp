@@ -26,6 +26,7 @@ class Dialog : public QDialog {
     [[nodiscard]] QHBoxLayout& footer() { return *footer_; }
     [[nodiscard]] QWidget& panel() { return *panel_; }
   public slots:
+    void open();
     void done(int result) override;
 
   protected:
