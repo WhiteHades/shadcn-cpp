@@ -152,8 +152,8 @@ if(SHADCN_BUILD_TESTS)
             set(SHADCN_MEDIA_PLATFORM "offscreen" CACHE STRING
                 "Qt platform plugin for the media suite")
             set_tests_properties(media PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=${SHADCN_MEDIA_PLATFORM};SHADCN_TEST_VIDEO=${shadcn_media_fixture}"
-                TIMEOUT 300)
+                ENVIRONMENT "QT_QPA_PLATFORM=${SHADCN_MEDIA_PLATFORM};SHADCN_TEST_VIDEO=${shadcn_media_fixture};SHADCN_TEST_CAPTIONS=${shadcn_media_fixture};SHADCN_TEST_CAPTURE=${CMAKE_CURRENT_BINARY_DIR}/media/capture.png"
+                TIMEOUT 900)
         endif()
     endif()
 endif()
