@@ -3,8 +3,12 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QListWidget>
 #include <QScrollArea>
 #include <QStackedWidget>
@@ -27,6 +31,10 @@ int main(int argc, char** argv) {
     args.addOption({"component", "Show one component.", "name"});
     args.addOption({"screenshot", "Save the visible component as a PNG.", "path"});
     args.addOption({"capture-all", "Save every component as a PNG.", "directory"});
+    args.addOption({"report-sizes",
+                    "Write each component's content size as JSON and exit.", "path"});
+    args.addOption({"stage-width", "Width used while measuring.", "pixels",
+                    "640"});
     args.process(app);
     const bool capture = args.isSet("screenshot") || args.isSet("capture-all");
     const bool dark = args.isSet("dark");
@@ -40,6 +48,37 @@ int main(int argc, char** argv) {
     if (args.isSet("component") && !names.contains(args.value("component"))) {
         std::cerr << "Unknown component\n";
         return 1;
+    }
+    if (args.isSet("report-sizes")) {
+        // The documentation stage is a fixed height today, which leaves a progress bar
+        // sitting in a band of empty space. Measure each demo at the stage width so the site
+        // can size the frame to what the component actually occupies.
+        const int stage = args.value("stage-width").toInt();
+        QJsonArray rows;
+        for (const auto& name : names) {
+            auto* canvas = gallery::demo(name);
+            auto* area = new QScrollArea;
+            area->setFrameShape(QFrame::NoFrame);
+            area->setWidgetResizable(true);
+            area->setWidget(canvas);
+            area->resize(stage, 320);
+            area->show();
+            QApplication::processEvents();
+            const auto hint = canvas->sizeHint();
+            rows.append(QJsonObject{
+                {"name", name},
+                {"width", hint.width()},
+                {"height", hint.height()},
+            });
+            delete area;
+        }
+        QFile out(args.value("report-sizes"));
+        if (!out.open(QIODevice::WriteOnly)) {
+            std::cerr << "Could not write the size report\n";
+            return 1;
+        }
+        out.write(QJsonDocument(rows).toJson());
+        return 0;
     }
     if (args.isSet("capture-all")) {
         const QDir output(args.value("capture-all"));
