@@ -23,7 +23,10 @@ function(shadcn_target target)
             target_compile_options(${target} PRIVATE /WX)
         endif()
     else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+        # -Wsuggest-override is not implied by -Wall. Without it a missing override compiles
+        # cleanly on GCC and only fails the WebAssembly build under clang, which is how a
+        # virtual Dialog::open slipped through a local build once.
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wsuggest-override)
         if(SHADCN_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE -Werror)
         endif()

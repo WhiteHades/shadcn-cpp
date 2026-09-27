@@ -22,7 +22,7 @@ The design and motion of shadcn, built with native C++ and Qt Widgets. Small API
   </picture>
 </p>
 
-Version **0.1.0** is in development. Linux builds and tests pass with Qt 6.11.2. Windows and macOS verification is pending.
+Version **0.1.1**. Linux builds and tests pass with Qt 6.11.2. Windows and macOS verification is pending.
 
 ## Build
 
