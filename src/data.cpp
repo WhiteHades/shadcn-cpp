@@ -12,7 +12,6 @@
 #include <QRegularExpressionValidator>
 #include <QSignalBlocker>
 #include <QStandardItemModel>
-#include <QToolTip>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QVariantAnimation>
@@ -696,10 +695,19 @@ void DataTable::setFilter(const QString& text, int column) {
     proxy_->setFilterFixedString(text);
 }
 
-Chart::Chart(QWidget* parent) : QWidget(parent), animation_(new QVariantAnimation(this)) {
+Chart::Chart(QWidget* parent)
+    : QWidget(parent), animation_(new QVariantAnimation(this)), tooltip_(new QLabel(this)) {
     setMouseTracking(true);
     setMinimumSize(160, 120);
     setAccessibleName(tr("Chart"));
+    tooltip_->setTextFormat(Qt::PlainText);
+    tooltip_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    tooltip_->setContentsMargins(10, 7, 10, 7);
+    auto tooltipFont = font();
+    tooltipFont.setPixelSize(12);
+    tooltip_->setFont(tooltipFont);
+    tooltip_->hide();
+    refreshTooltip();
     animation_->setStartValue(0.0);
     animation_->setEndValue(1.0);
     animation_->setDuration(500);
@@ -720,6 +728,7 @@ std::expected<void, ValueError> Chart::setSeries(QList<ChartSeries> series) {
                 return std::unexpected(ValueError::NonFinite);
     series_ = std::move(series);
     hover_ = -1;
+    tooltip_->hide();
     QStringList descriptions;
     for (const auto& row : series_) {
         QStringList values;
@@ -745,6 +754,12 @@ QSize Chart::sizeHint() const {
 QRectF Chart::plotRect() const {
     return QRectF(rect()).adjusted(44, 12, -12, legend_ ? -54 : -30);
 }
+void Chart::refreshTooltip() {
+    tooltip_->setStyleSheet(QString("QLabel { background: %1; color: %2; border: 1px solid %3; "
+                                    "border-radius: 8px; }")
+                                .arg(css(*this, Role::Popover), css(*this, Role::PopoverForeground),
+                                     css(*this, Role::Border)));
+}
 void Chart::animate() {
     animation_->stop();
     if (isVisible() && !reduced(*this)) {
@@ -759,11 +774,13 @@ bool Chart::event(QEvent* event) {
     if (event->type() == QEvent::Hide) {
         animation_->stop();
         amount_ = 1;
+        tooltip_->hide();
     } else if (event->type() == QEvent::StyleChange) {
         if (reduced(*this)) {
             animation_->stop();
             amount_ = 1;
         }
+        refreshTooltip();
         update();
     }
     return result;
@@ -899,7 +916,7 @@ void Chart::mouseMoveEvent(QMouseEvent* event) {
     for (const auto& series : series_)
         count = std::max(count, series.values.size());
     if (count == 0 || !area.contains(event->position())) {
-        QToolTip::hideText();
+        tooltip_->hide();
         hover_ = -1;
         return;
     }
@@ -910,7 +927,7 @@ void Chart::mouseMoveEvent(QMouseEvent* event) {
         const auto delta = event->position() - area.center();
         const auto radius = std::min(area.width(), area.height()) / 2;
         if (std::hypot(delta.x(), delta.y()) > radius) {
-            QToolTip::hideText();
+            tooltip_->hide();
             hover_ = -1;
             return;
         }
@@ -928,27 +945,30 @@ void Chart::mouseMoveEvent(QMouseEvent* event) {
             cumulative += std::max(0.0, values[i] / scale);
             if (target < cumulative) { index = static_cast<int>(i); break; }
         }
-        if (index < 0) { QToolTip::hideText(); hover_ = -1; return; }
+        if (index < 0) { tooltip_->hide(); hover_ = -1; return; }
     }
-    if (index == hover_)
-        return;
-    hover_ = index;
-    QStringList lines;
-    if (index < labels_.size())
-        lines << labels_[index];
-    for (const auto& series : series_) {
-        if (index < series.values.size()) lines << series.name + ": " + QString::number(series.values[index]);
-        if (type_ == ChartType::Pie) break;
+    if (index != hover_) {
+        hover_ = index;
+        QStringList lines;
+        if (index < labels_.size())
+            lines << labels_[index];
+        for (const auto& series : series_) {
+            if (index < series.values.size())
+                lines << series.name + ": " + QString::number(series.values[index]);
+            if (type_ == ChartType::Pie) break;
+        }
+        tooltip_->setText(lines.join('\n'));
+        tooltip_->adjustSize();
     }
-    auto palette = QToolTip::palette();
-    palette.setColor(QPalette::ToolTipBase, colour(*this, Role::Popover));
-    palette.setColor(QPalette::ToolTipText, colour(*this, Role::PopoverForeground));
-    QToolTip::setPalette(palette);
-    QToolTip::showText(event->globalPosition().toPoint(), lines.join('\n'), this);
+    const auto point = event->position().toPoint() + QPoint(12, 12);
+    tooltip_->move(std::clamp(point.x(), 4, std::max(4, width() - tooltip_->width() - 4)),
+                   std::clamp(point.y(), 4, std::max(4, height() - tooltip_->height() - 4)));
+    tooltip_->show();
+    tooltip_->raise();
 }
 void Chart::leaveEvent(QEvent* event) {
     hover_ = -1;
-    QToolTip::hideText();
+    tooltip_->hide();
     QWidget::leaveEvent(event);
 }
 } // namespace shadcn

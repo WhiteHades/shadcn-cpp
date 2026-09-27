@@ -243,6 +243,7 @@ class Chart : public QWidget {
 
   private:
     void animate();
+    void refreshTooltip();
     QRectF plotRect() const;
     ChartType type_ = ChartType::Bar;
     QList<ChartSeries> series_;
@@ -251,6 +252,7 @@ class Chart : public QWidget {
     double amount_ = 1;
     int hover_ = -1;
     QVariantAnimation* animation_;
+    QLabel* tooltip_;
 };
 
 } // namespace shadcn
