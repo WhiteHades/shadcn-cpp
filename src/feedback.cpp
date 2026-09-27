@@ -2,6 +2,9 @@
 // Design source: shadcn-ui/ui base wrappers and Nova style rules.
 #include <shadcn/feedback.hpp>
 
+#include <shadcn/controls.hpp>
+#include <shadcn/widgets.hpp>
+
 #include <QAccessible>
 #include <QApplication>
 #include <QBoxLayout>
@@ -998,8 +1001,8 @@ void Questionnaire::render() {
     choiceGroup_->setExclusive(question.type == QuestionnaireType::Single);
     for (const auto& choice : question.choices) {
         QAbstractButton* button = question.type == QuestionnaireType::Single
-            ? static_cast<QAbstractButton*>(new QRadioButton(choice.label, this))
-            : static_cast<QAbstractButton*>(new QCheckBox(choice.label, this));
+            ? static_cast<QAbstractButton*>(new RadioGroupItem(choice.label, this))
+            : static_cast<QAbstractButton*>(new Checkbox(choice.label, this));
         button->setMinimumHeight(36);
         button->setFocusPolicy(Qt::StrongFocus);
         button->setAccessibleDescription(choice.description);
