@@ -7,6 +7,7 @@
 #include <QSignalSpy>
 #include <QStyle>
 #include <QHash>
+#include <QHash>
 #include <QTest>
 
 #include <shadcn/navigation.hpp>
@@ -30,11 +31,68 @@ double contrast(QColor a, QColor b) {
     return (high + 0.05) / (low + 0.05);
 }
 
+/// The colour a region mostly holds. A resting item is nearly all surface, so the
+/// colour it holds most often is its fill, whatever else it draws.
+QColor modal(const QImage& image, const QRect& region) {
+    QHash<QRgb, int> tally;
+    const auto clipped = region.intersected(image.rect());
+    for (int y = clipped.top(); y <= clipped.bottom(); ++y)
+        for (int x = clipped.left(); x <= clipped.right(); ++x) ++tally[image.pixelColor(x, y).rgb()];
+    auto best = 0;
+    auto held = 0;
+    for (auto it = tally.constBegin(); it != tally.constEnd(); ++it)
+        if (it.value() > held) { held = it.value(); best = it.key(); }
+    return QColor::fromRgb(best);
+}
+
 }  // namespace
 
 class SidebarTest : public QObject {
     Q_OBJECT
   private slots:
+    /// A rail's items carry a style sheet built from theme roles, and it was built
+    /// once, when the item was created. Repainting on a theme change leaves every
+    /// item wearing the colours of the mode the rail was built in: switch a rail to
+    /// dark and the open item stays a near-white block on a near-black page.
+    ///
+    /// The check builds a rail in light, moves the theme, and measures the open item
+    /// before and after. It was run against the fix removed, and failed with the item
+    /// reporting the same colour in both modes.
+    void itemsFollowTheTheme() {
+        shadcn::install(*qApp, shadcn::Theme::neutral(shadcn::ColorMode::Light),
+                        shadcn::MotionPolicy::Reduced);
+        shadcn::SidebarProvider provider;
+        auto* sidebar = new shadcn::Sidebar(&provider);
+        sidebar->setExpandedWidth(220);
+        provider.addSidebar(*sidebar);
+        provider.resize(400, 400);
+        provider.show();
+        QCoreApplication::processEvents();
+        auto& active = sidebar->addMenuButton("Courses", true);
+        QTRY_VERIFY(active.isVisible());
+        const auto box = QRect(active.mapTo(sidebar, QPoint(0, 0)), active.size());
+        const auto lit = modal(sidebar->grab().toImage(), box);
+        const auto* style = qobject_cast<const shadcn::Style*>(qApp->style());
+        const auto sidebarRole = style->theme().color(shadcn::Role::Sidebar);
+        const auto rail = QColor::fromRgbF(static_cast<float>(sidebarRole.r),
+                                            static_cast<float>(sidebarRole.g),
+                                            static_cast<float>(sidebarRole.b));
+        QVERIFY2(contrast(lit, rail) < 1.4,
+                 "the open item is not near the sidebar accent in light mode");
+
+        // The theme moves under the rail's feet. The rebuild is deferred a turn, so
+        // the wait is for the rail to finish it rather than for a colour.
+        shadcn::install(*qApp, shadcn::Theme::neutral(shadcn::ColorMode::Dark),
+                        shadcn::MotionPolicy::Reduced);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            contrast(modal(sidebar->grab().toImage(), box), lit) > 2.0, 2000);
+        const auto dark = modal(sidebar->grab().toImage(), box);
+        QVERIFY2(contrast(dark, lit) > 2.0,
+                 qPrintable(QStringLiteral("the open item is %1 after the theme moved and %2 "
+                                           "before, so it is still wearing the old mode's colours")
+                                .arg(dark.name(), lit.name())));
+    }
+
     void initTestCase() {
         shadcn::install(*qApp, shadcn::Theme::neutral(), shadcn::MotionPolicy::Reduced);
     }

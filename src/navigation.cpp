@@ -857,6 +857,9 @@ QPushButton& sidebarMenuButton(const QWidget* rail, QVBoxLayout* into, const QSt
     // The label is kept as a property because an item with an icon clears its text,
     // and the accessible name still has to say what the item is.
     button->setProperty("shadcnSidebarText", text);
+    // The variant is kept so the rail can rebuild an item's sheet when the theme
+    // moves, rather than repainting an item that is still wearing the old colours.
+    button->setProperty("shadcnSidebarVariant", static_cast<int>(variant));
     const auto height = size == SidebarMenuSize::Sm ? 28 : size == SidebarMenuSize::Lg ? 48 : 32;
     // Fixed in both height and policy, and not merely a minimum height. A button with
     // only a minimum grows to fill whatever the rail has, and a layout that shares
@@ -922,7 +925,26 @@ void Sidebar::paintEvent(QPaintEvent*) {
 
 bool Sidebar::event(QEvent* event) {
     const auto result = QFrame::event(event);
-    if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) update();
+    if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
+        // The items carry a style sheet built from theme roles, and it was built once,
+        // when the item was created. Repainting alone leaves every item wearing the
+        // colours of the mode the rail was built in: switch a rail to dark and the
+        // open item stays a near-white block on a near-black page.
+        //
+        // The rebuild is deferred to the next event loop turn rather than done here.
+        // A style change is delivered while the new style is still being installed, so
+        // reading the theme at that point can hand back the old one, and the item is
+        // rebuilt with the colours it was meant to have just lost.
+        QTimer::singleShot(0, this, [this] {
+            for (auto* button : findChildren<QPushButton*>())
+                if (button->property("shadcnSidebarVariant").isValid())
+                    button->setStyleSheet(sidebarMenuButtonSheet(
+                        this, static_cast<SidebarMenuVariant>(
+                                  button->property("shadcnSidebarVariant").toInt())));
+            update();
+        });
+        update();
+    }
     return result;
 }
 
