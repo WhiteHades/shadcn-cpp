@@ -810,31 +810,53 @@ QVBoxLayout& Sidebar::header() { return *header_; }
 QVBoxLayout& Sidebar::content() { return *content_; }
 QVBoxLayout& Sidebar::footer() { return *footer_; }
 
-QPushButton& Sidebar::addMenuButton(const QString& text, bool active,
-                                    SidebarMenuVariant variant, SidebarMenuSize size) {
-    auto* button = new QPushButton(text, contentHost_);
+namespace {
+/// The style sheet for a menu button in a rail.
+///
+/// A resting item is transparent with no boundary, and only draws one when it is
+/// hovered, focused or active. A permanent border turns a rail of navigation into
+/// a stack of buttons, which is a different component wearing the same name.
+QString sidebarMenuButtonSheet(const QWidget* rail, SidebarMenuVariant variant) {
+    const auto background = variant == SidebarMenuVariant::Outline
+                                ? rgb(colour(*rail, Role::Background))
+                                : QStringLiteral("transparent");
+    return QStringLiteral(
+               "QPushButton { color:%1; background:%2; border:1px solid transparent; "
+               "border-radius:6px; padding:4px 8px; text-align:left; }"
+               "QPushButton:hover, QPushButton:checked { color:%3; background:%4; "
+               "border-color:%4; }"
+               "QPushButton:focus { border-color:%5; }")
+        .arg(rgb(colour(*rail, Role::SidebarForeground)), background,
+             rgb(colour(*rail, Role::SidebarAccentForeground)),
+             rgb(colour(*rail, Role::SidebarAccent)), rgb(colour(*rail, Role::SidebarRing)));
+}
+
+/// Builds one menu button, in the navigation or in the footer.
+QPushButton& sidebarMenuButton(const QWidget* rail, QVBoxLayout* into, const QString& text, bool active,
+                               SidebarMenuVariant variant, SidebarMenuSize size) {
+    auto* button = new QPushButton(text, const_cast<QWidget*>(rail));
     button->setCheckable(true);
     button->setChecked(active);
     button->setFocusPolicy(Qt::StrongFocus);
+    // The label is kept as a property because an item with an icon clears its text,
+    // and the accessible name still has to say what the item is.
     button->setProperty("shadcnSidebarText", text);
     const auto height = size == SidebarMenuSize::Sm ? 28 : size == SidebarMenuSize::Lg ? 48 : 32;
     button->setMinimumHeight(height);
-    const auto background = variant == SidebarMenuVariant::Outline
-                                ? rgb(colour(*this, Role::Background))
-                                : QStringLiteral("transparent");
-    button->setStyleSheet(QStringLiteral(
-                              "QPushButton { color:%1; background:%2; border:1px solid %3; "
-                              "border-radius:6px; padding:4px 8px; text-align:left; }"
-                              "QPushButton:hover, QPushButton:checked { color:%4; background:%5; "
-                              "border-color:%5; }"
-                              "QPushButton:focus { border-color:%6; }")
-                              .arg(rgb(colour(*this, Role::SidebarForeground)), background,
-                                   rgb(colour(*this, Role::SidebarBorder)),
-                                   rgb(colour(*this, Role::SidebarAccentForeground)),
-                                   rgb(colour(*this, Role::SidebarAccent)),
-                                   rgb(colour(*this, Role::SidebarRing))));
-    content_->addWidget(button);
+    button->setStyleSheet(sidebarMenuButtonSheet(rail, variant));
+    into->addWidget(button);
     return *button;
+}
+}  // namespace
+
+QPushButton& Sidebar::addMenuButton(const QString& text, bool active,
+                                    SidebarMenuVariant variant, SidebarMenuSize size) {
+    return sidebarMenuButton(this, content_, text, active, variant, size);
+}
+
+QPushButton& Sidebar::addFooterMenuButton(const QString& text, bool active,
+                                          SidebarMenuVariant variant, SidebarMenuSize size) {
+    return sidebarMenuButton(this, footer_, text, active, variant, size);
 }
 
 void Sidebar::updateWidth(bool animate) {

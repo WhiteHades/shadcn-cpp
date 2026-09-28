@@ -509,7 +509,10 @@ QWidget* demo(const QString& name, QWidget* parent) {
         (void)sidebar->addMenuButton("Home", true);
         (void)sidebar->addMenuButton("Inbox");
         (void)sidebar->addMenuButton("Calendar");
-        (void)sidebar->addMenuButton("Settings");
+        // A footer item, so the rail shows both places a control can live. The
+        // footer is for a control that acts on the whole application; the navigation
+        // above is for the pages.
+        (void)sidebar->addFooterMenuButton("Settings");
         provider->addSidebar(*sidebar);
         provider->content().addWidget(new SidebarTrigger(provider), 0, Qt::AlignLeft);
         provider->content().addWidget(new Label("Your workspace", provider));

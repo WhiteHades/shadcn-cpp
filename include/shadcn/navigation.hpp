@@ -240,6 +240,15 @@ public:
     [[nodiscard]] QPushButton& addMenuButton(const QString& text, bool active = false,
                                              SidebarMenuVariant variant = SidebarMenuVariant::Default,
                                              SidebarMenuSize size = SidebarMenuSize::Default);
+    /// A menu button in the rail's footer, styled like one in the navigation.
+    ///
+    /// The footer is where a control that acts on the whole application lives,
+    /// separate from the navigation above it. A caller that cannot put one there
+    /// puts it among the navigation, and the two stop looking like different
+    /// things.
+    [[nodiscard]] QPushButton& addFooterMenuButton(const QString& text, bool active = false,
+                                                   SidebarMenuVariant variant = SidebarMenuVariant::Default,
+                                                   SidebarMenuSize size = SidebarMenuSize::Default);
 signals:
     void openChanged(bool open);
 protected:
