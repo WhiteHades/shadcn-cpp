@@ -500,6 +500,11 @@ Prose::Prose(QWidget* parent) : QTextEdit(parent) {
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     setFocusPolicy(Qt::StrongFocus);
+    // A reader surface takes focus so it can be scrolled and reached with Tab, and a
+    // blinking caret in a thing nobody is typing into is the clearest signal that the
+    // surface is a form. Text stays selectable, so a reader can still mark and copy;
+    // only the caret goes.
+    setCursorWidth(0);
     detail::refreshScrollBars(*this);
     viewport()->setAutoFillBackground(false);
     // The surface is the page. A text edit's own base colour is the platform's
@@ -584,6 +589,9 @@ void Prose::setReaderMode(bool reader) {
     // typed into is not a different surface, it is the same one with the caret
     // back, so selection survives either way.
     setReadOnly(reader);
+    // Editing brings the caret back, because a surface that can be typed into and
+    // shows no caret is worse than one that does.
+    setCursorWidth(reader ? 0 : 1);
     setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard |
                             (reader ? Qt::TextBrowserInteraction : Qt::TextEditable) |
                             Qt::LinksAccessibleByMouse | Qt::LinksAccessibleByKeyboard);
