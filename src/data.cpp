@@ -163,11 +163,15 @@ Combobox::Combobox(QWidget* parent) : Select(parent) {
     lineEdit()->setStyleSheet("QLineEdit { background: transparent; border: none; }");
     // The editable field is its own focusable control inside the combo, so it needs its own
     // name. Without one it is announced as an unnamed edit, and the combo's own name does
-    // not cover it. QLineEditIconButton is Qt's clear affordance and also needs a name.
+    // not cover it.
     lineEdit()->setAccessibleName(tr("Search"));
-    if (auto* clear = lineEdit()->findChild<QAbstractButton*>(
-                QStringLiteral("qt_clear_button"), Qt::FindDirectChildrenOnly)) {
-        clear->setAccessibleName(tr("Clear the search field"));
+    // Qt's clear affordance has no object name of its own, so it is found by class. It is a
+    // pointer target, so it also needs a target area and a name.
+    for (auto* child : lineEdit()->findChildren<QWidget*>()) {
+        if (child->metaObject()->className() != QLatin1String("QLineEditIconButton")) continue;
+        child->setObjectName(QStringLiteral("shadcnComboboxClear"));
+        child->setAccessibleName(tr("Clear the search field"));
+        child->setMinimumSize(24, 24);
     }
     completer()->setCompletionMode(QCompleter::PopupCompletion);
     completer()->setCaseSensitivity(Qt::CaseInsensitive);

@@ -500,8 +500,10 @@ void Checkbox::setInvalid(bool invalid) {
     setInvalidProperty(*this, invalid);
 }
 QSize Checkbox::sizeHint() const {
+    // The box and the label are both painted vertically centred, so the height is the
+    // target area. Holding it at 24 reaches the minimum without moving either.
     return {16 + (text().isEmpty() ? 0 : 8 + fontMetrics().size(Qt::TextShowMnemonic, text()).width()),
-            text().isEmpty() ? 16 : std::max(16, fontMetrics().height())};
+            text().isEmpty() ? 24 : std::max(24, fontMetrics().height())};
 }
 QSize Checkbox::minimumSizeHint() const { return sizeHint(); }
 bool Checkbox::hitButton(const QPoint& position) const { return rect().contains(position); }
@@ -551,7 +553,9 @@ Switch::Switch(QWidget* parent) : QCheckBox(parent), transition_(new QVariantAni
     new FocusRing(*this);
 }
 void Switch::setSwitchSize(SwitchSize size) { size_ = size; updateGeometry(); update(); }
-QSize Switch::sizeHint() const { return size_ == SwitchSize::Sm ? QSize(24, 14) : QSize(32, 19); }
+// The switch track is painted centred inside the widget, so the height is the target area
+// and can reach the 24 pixel minimum without changing what is drawn.
+QSize Switch::sizeHint() const { return size_ == SwitchSize::Sm ? QSize(24, 24) : QSize(32, 24); }
 QSize Switch::minimumSizeHint() const { return sizeHint(); }
 void Switch::updatePosition() { animate(*transition_, *this, position_, isChecked() ? 1 : 0); }
 bool Switch::event(QEvent* event) {
