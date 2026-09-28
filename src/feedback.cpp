@@ -968,7 +968,22 @@ void Questionnaire::updateChoice(int question, const QString& id, bool checked) 
 void Questionnaire::render() {
     while (layout_->count() > 1) {
         auto* item = layout_->takeAt(1);
-        if (auto* widget = item->widget()) { widget->hide(); widget->deleteLater(); }
+        if (auto* widget = item->widget()) {
+            widget->hide();
+            widget->deleteLater();
+        } else if (auto* nested = item->layout()) {
+            // A slot can join the layout directly rather than through a host widget, so its
+            // controls are removed here. Leaving them would keep a stale button alive.
+            while (nested->count() > 0) {
+                if (auto* child = nested->takeAt(0)) {
+                    if (auto* control = child->widget()) { control->hide(); control->deleteLater(); }
+                    delete child;
+                }
+            }
+            // Deferred, because the parent layout still holds a reference to this one until
+            // the event loop settles. Deleting it outright is a use-after-free.
+            nested->deleteLater();
+        }
         delete item;
     }
     if (choiceGroup_) {
@@ -1038,9 +1053,10 @@ void Questionnaire::render() {
     nextButton->setVariant(Variant::Default);
     connect(nextButton, &QPushButton::clicked, this, &Questionnaire::next);
     actions->addWidget(nextButton);
-    auto* actionsHost = new QWidget(this);
-    actionsHost->setLayout(actions);
-    layout_->addWidget(actionsHost);
+    // The action row joins the layout directly. Wrapping it in a content-sized host put
+    // the buttons flush against that host's edge, and a button shifts down a pixel when it
+    // is pressed, so the host clipped it.
+    layout_->addLayout(actions);
 }
 
 Marker::Marker(const QString& text, QWidget* parent) : QFrame(parent), icon_(new QLabel(this)),
