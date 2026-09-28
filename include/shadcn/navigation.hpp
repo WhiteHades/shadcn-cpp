@@ -265,6 +265,10 @@ protected:
     bool event(QEvent* event) override;
 private:
     void updateWidth(bool animate);
+    /// Rebuilds the items' style sheets when the theme behind the rail has moved.
+    /// Done at paint time because that is the first moment the theme is settled.
+    void restyleItems();
+    const Theme* itemsUseTheme_ = nullptr;
     SidebarSide side_ = SidebarSide::Left;
     SidebarCollapsible collapsible_ = SidebarCollapsible::Offcanvas;
     SidebarVariant variant_ = SidebarVariant::Sidebar;

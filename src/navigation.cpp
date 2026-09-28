@@ -916,6 +916,7 @@ void Sidebar::updateWidth(bool animate) {
 }
 
 void Sidebar::paintEvent(QPaintEvent*) {
+    restyleItems();
     QPainter painter(this);
     const auto fill = variant_ == SidebarVariant::Inset ? colour(*this, Role::Background)
                                                         : colour(*this, Role::Sidebar);
@@ -926,26 +927,31 @@ void Sidebar::paintEvent(QPaintEvent*) {
 bool Sidebar::event(QEvent* event) {
     const auto result = QFrame::event(event);
     if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
-        // The items carry a style sheet built from theme roles, and it was built once,
-        // when the item was created. Repainting alone leaves every item wearing the
-        // colours of the mode the rail was built in: switch a rail to dark and the
-        // open item stays a near-white block on a near-black page.
-        //
-        // The rebuild is deferred to the next event loop turn rather than done here.
-        // A style change is delivered while the new style is still being installed, so
-        // reading the theme at that point can hand back the old one, and the item is
-        // rebuilt with the colours it was meant to have just lost.
-        QTimer::singleShot(0, this, [this] {
-            for (auto* button : findChildren<QPushButton*>())
-                if (button->property("shadcnSidebarVariant").isValid())
-                    button->setStyleSheet(sidebarMenuButtonSheet(
-                        this, static_cast<SidebarMenuVariant>(
-                                  button->property("shadcnSidebarVariant").toInt())));
-            update();
-        });
+        // The items' sheets are rebuilt when the rail next paints, not here. A style
+        // change is delivered while the new style is still being installed, so
+        // reading the theme inside the handler can hand back the old one and rebuild
+        // an item with the colours it was just meant to lose. By paint time the
+        // style has settled, so the read is the one that counts.
         update();
     }
     return result;
+}
+
+void Sidebar::restyleItems() {
+    // The items carry a style sheet built from theme roles, and it was built once,
+    // when the item was created. Left alone, a rail switched to dark keeps the
+    // colours of the mode it was built in: the open item stays a near-white block
+    // on a near-black page. A rail of navigation that does not follow the theme is
+    // the light component in the middle of a dark interface.
+    const auto& current = themeFor(*this);
+    if (itemsUseTheme_ == &current) return;
+    itemsUseTheme_ = &current;
+    for (auto* button : findChildren<QPushButton*>())
+        if (button->property("shadcnSidebarVariant").isValid())
+            button->setStyleSheet(sidebarMenuButtonSheet(
+                this, static_cast<SidebarMenuVariant>(
+                          button->property("shadcnSidebarVariant").toInt())));
+    update();
 }
 
 SidebarProvider::SidebarProvider(QWidget* parent)
