@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: MIT
 #include "demos.hpp"
 #include <QApplication>
+#include <QFile>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
 #include <QStandardItemModel>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <array>
+#ifdef SHADCN_GALLERY_MEDIA
+#include <shadcn/media.hpp>
+#endif
 #include <shadcn/shadcn.hpp>
 
 namespace gallery {
@@ -26,8 +31,44 @@ QStringList components() {
                       "carousel", "pagination", "direction", "toast", "sonner", "attachment",
                       "bubble", "message", "message-scroller", "questionnaire", "marker", "button-ripple"};
     names.sort();
+#ifdef SHADCN_GALLERY_MEDIA
+    // The player is an optional component, so it only joins the gallery when the media
+    // library is part of the build.
+    names.append(QStringLiteral("video-player"));
+#endif
     return names;
 }
+namespace {
+/// Where the sample the gallery plays comes from.
+///
+/// The browser resolves the name against the page that loaded the gallery, so the live
+/// preview needs nothing but the file beside the WebAssembly build. A native build reads
+/// the committed asset directly, and says so rather than failing when it is absent.
+#ifdef Q_OS_WASM
+QUrl mediaSample() { return QUrl(QStringLiteral("shadow-sample.mp4")); }
+#elif defined(SHADCN_GALLERY_MEDIA_ASSET)
+QUrl mediaSample() {
+    const QFile sample(QStringLiteral(SHADCN_GALLERY_MEDIA_ASSET));
+    return sample.exists() ? QUrl::fromLocalFile(sample.fileName()) : QUrl();
+}
+#else
+QUrl mediaSample() { return {}; }
+#endif
+
+/// The player is an optional component, so a gallery built without the media library
+/// says so instead of failing to link.
+QWidget* mediaPlayer(QWidget* host) {
+#ifdef SHADCN_GALLERY_MEDIA
+    auto* player = new VideoPlayer(host);
+    player->setFixedSize(640, 360);
+    player->setSource(mediaSample());
+    return player;
+#else
+    return new QLabel("Video player: build with SHADCN_BUILD_MEDIA=ON", host);
+#endif
+}
+} // namespace
+
 QWidget* demo(const QString& name, QWidget* parent) {
     auto* canvas = new QWidget(parent);
     canvas->setAutoFillBackground(true);
@@ -605,6 +646,8 @@ QWidget* demo(const QString& name, QWidget* parent) {
         auto* marker = new Marker("Today", host);
         marker->setVariant(MarkerVariant::Separator);
         layout->addWidget(marker);
+    } else if (name == "video-player") {
+        layout->addWidget(mediaPlayer(host));
     } else if (name == "chart") {
         auto* chart = new Chart(host);
         chart->setFixedSize(480, 240);

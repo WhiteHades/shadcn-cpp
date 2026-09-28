@@ -1,8 +1,65 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
-#include <QRhiWidget>
+#include <QImage>
+#include <QPainter>
+#include <QWidget>
+
+#ifdef Q_OS_WASM
+
+// The browser decodes, so there is no QVideoFrame to hand to a texture pool and no Qt
+// Multimedia private header to use. Qt paints the frame it is given. The QVideoFrame and
+// QRhi path below is for a native build and is unchanged.
+namespace shadcn::detail {
+
+class VideoSurface final : public QWidget {
+public:
+    explicit VideoSurface(QWidget* parent = nullptr) : QWidget(parent) {
+        // Published so a test can read the mode back without the private renderer's type.
+        setProperty("videoAspectRatioMode", static_cast<int>(aspectRatioMode_));
+    }
+
+    [[nodiscard]] Qt::AspectRatioMode aspectRatioMode() const noexcept { return aspectRatioMode_; }
+
+    void setAspectRatioMode(Qt::AspectRatioMode mode) {
+        if (aspectRatioMode_ == mode)
+            return;
+        aspectRatioMode_ = mode;
+        // Exposed so a test can read the mode back without reaching into this class.
+        setProperty("videoAspectRatioMode", static_cast<int>(mode));
+        update();
+    }
+
+    /// Takes ownership of the pixels the browser just decoded. Called on the GUI thread
+    /// with a direct connection, so the copy happens before the buffer is written again.
+    void submitFrame(const QImage& frame) {
+        frame_ = frame.copy();
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.fillRect(rect(), Qt::black);
+        if (frame_.isNull())
+            return;
+        const auto fitted = frame_.size().scaled(size(), aspectRatioMode_);
+        const QRect target(QPoint{ (width() - fitted.width()) / 2, (height() - fitted.height()) / 2 },
+                           fitted);
+        painter.drawImage(target, frame_, frame_.rect());
+    }
+
+private:
+    QImage frame_;
+    Qt::AspectRatioMode aspectRatioMode_ = Qt::KeepAspectRatio;
+};
+
+} // namespace shadcn::detail
+
+#else
+
 #include <QFile>
+#include <QRhiWidget>
 #include <QVideoSink>
 #include <QtMultimedia/private/qmultimediautils_p.h>
 #include <QtMultimedia/private/qvideoframetexturepool_p.h>
@@ -18,6 +75,8 @@ namespace shadcn::detail {
 class VideoSurface final : public QRhiWidget {
 public:
     explicit VideoSurface(QWidget* parent = nullptr) : QRhiWidget(parent) {
+        // Published so a test can read the mode back without the private renderer's type.
+        setProperty("videoAspectRatioMode", static_cast<int>(aspectRatioMode_));
         connect(&sink_, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame& frame) {
             const auto oldFrame = pool_->currentFrame();
             pool_->setCurrentFrame(frame);
@@ -45,6 +104,8 @@ public:
         if (aspectRatioMode_ == mode)
             return;
         aspectRatioMode_ = mode;
+        // Exposed so a test can read the mode back without reaching into this class.
+        setProperty("videoAspectRatioMode", static_cast<int>(mode));
         update();
     }
 
@@ -315,3 +376,5 @@ private:
 };
 
 } // namespace shadcn::detail
+
+#endif

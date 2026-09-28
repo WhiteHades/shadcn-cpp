@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include <shadcn/media.hpp>
+#include "playback.hpp"
 #include "video_surface.hpp"
 
 #include <QActionGroup>
@@ -15,11 +16,16 @@
 #include <QIconEngine>
 #include <QPainter>
 #include <QPainterPath>
-#include <QMediaMetaData>
 #include <QMenu>
 #include <QShortcut>
 #include <QSignalBlocker>
 #include <algorithm>
+
+using shadcn::detail::AudioOutput;
+using shadcn::detail::MediaStatus;
+using shadcn::detail::Playback;
+using shadcn::detail::TrackInfo;
+using shadcn::detail::TrackKind;
 
 namespace shadcn {
 namespace {
@@ -111,7 +117,7 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     surface_(new QWidget(this)), controls_(new QWidget(surface_)), message_(new QWidget(surface_)),
     idle_(new QTimer(this)), opacity_(new QGraphicsOpacityEffect(controls_)),
     fade_(new QPropertyAnimation(opacity_, "opacity", this)),
-    player_(new QMediaPlayer(this)), audio_(new QAudioOutput(this)),
+    player_(new Playback(this)), audio_(shadcn::detail::makeAudioOutput(*player_, this)),
     video_(new detail::VideoSurface(this)), play_(new Button(tr("Play"), this)),
     mute_(new Button(tr("Mute"), this)), open_(new Button(tr("Open video"), this)),
     fullscreen_(new Button(tr("Fullscreen"), this)), timeline_(new Slider(this)),
@@ -120,8 +126,15 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     video_->setMinimumSize(160, 90);
     video_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     video_->setObjectName(QStringLiteral("videoRenderer"));
+#ifndef Q_OS_WASM
     player_->setAudioOutput(audio_);
     player_->setVideoSink(video_->videoSink());
+    connect(video_, &QRhiWidget::renderFailed, this, [this] {
+        renderingFailed_ = true;
+        player_->pause();
+        updateTransport();
+    });
+#endif
     audio_->setVolume(.75F);
     auto* hostLayout = new QVBoxLayout(this);
     hostLayout->setContentsMargins(0, 0, 0, 0);
@@ -144,6 +157,11 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     messageLayout->addWidget(open_, 0, Qt::AlignHCenter);
     layout->addWidget(message_, 0, 0, Qt::AlignCenter);
     connect(open_, &QPushButton::clicked, this, &VideoPlayer::openFile);
+#ifdef Q_OS_WASM
+    // A browser cannot hand a local path to a media element, so the picker is never
+    // offered. Left alone it would appear in the empty state and do nothing.
+    open_->hide();
+#endif
     timeline_->setAccessibleName(tr("Playback position"));
     timeline_->setSingleStep(1000);
     timeline_->setPageStep(10000);
@@ -172,15 +190,19 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     bottomLayout->addWidget(captions);
     bottomLayout->addWidget(controls_);
     layout->addWidget(bottom, 0, 0, Qt::AlignBottom);
+#ifndef Q_OS_WASM
     connect(video_->videoSink(), &QVideoSink::subtitleTextChanged, captions, [captions](const QString& text) {
         captions->setText(text);
         captions->setVisible(!text.isEmpty());
     });
-    connect(video_, &QRhiWidget::renderFailed, this, [this] {
-        renderingFailed_ = true;
-        player_->pause();
-        updateTransport();
+#else
+    // The browser decodes and hands over a finished frame, so the renderer is fed
+    // directly. A media element keeps its caption tracks to itself, so the overlay stays
+    // empty in the browser build.
+    connect(player_, &detail::Playback::frameAvailable, video_, [video = video_](const QImage& frame) {
+        video->submitFrame(frame);
     });
+#endif
     auto* transport = new QHBoxLayout;
     transport->setContentsMargins(0, 0, 0, 0);
     transport->setSpacing(4);
@@ -204,6 +226,12 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     volume_->setValues({.75});
     time_->setObjectName(QStringLiteral("videoTime"));
     time_->setWordWrap(true);
+    // The readout updates every second. With proportional figures the digits have
+    // different widths, so the label changes width as the count advances and the whole
+    // transport shifts. Tabular figures give every digit the same advance.
+    auto timeFont = time_->font();
+    timeFont.setFeature(QFont::Tag("tnum"), 1);
+    time_->setFont(timeFont);
     transport->addWidget(play_);
     transport->addWidget(time_);
     transport->addStretch();
@@ -242,7 +270,7 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focused) {
         if (focused && (focused == surface_ || surface_->isAncestorOf(focused))) revealControls();
     });
-    connect(player_, &QMediaPlayer::playbackStateChanged, this, &VideoPlayer::revealControls);
+    connect(player_, &Playback::playbackStateChanged, this, &VideoPlayer::revealControls);
     connect(play_, &QPushButton::clicked, this, [this] {
         if (player_->isPlaying()) player_->pause();
         else player_->play();
@@ -257,21 +285,21 @@ VideoPlayer::VideoPlayer(QWidget* parent) : QWidget(parent),
     connect(volume_, &Slider::valuesChanged, this, [this](const QVector<double>& values) {
         if (!values.isEmpty()) audio_->setVolume(static_cast<float>(values.first()));
     });
-    connect(audio_, &QAudioOutput::volumeChanged, this, [this](float value) {
+    connect(audio_, &AudioOutput::volumeChanged, this, [this](float value) {
         const QSignalBlocker blocker(volume_);
         volume_->setValues({value});
     });
-    connect(audio_, &QAudioOutput::mutedChanged, this, [this](bool muted) {
+    connect(audio_, &AudioOutput::mutedChanged, this, [this](bool muted) {
         mute_->setText(muted ? tr("Unmute") : tr("Mute"));
         mute_->setToolTip(mute_->text());
         mute_->setIcon(mediaIcon(muted ? MediaGlyph::Muted : MediaGlyph::Volume));
     });
-    connect(player_, &QMediaPlayer::positionChanged, this, &VideoPlayer::updateTransport);
-    connect(player_, &QMediaPlayer::durationChanged, this, &VideoPlayer::updateTransport);
-    connect(player_, &QMediaPlayer::seekableChanged, this, &VideoPlayer::updateTransport);
-    connect(player_, &QMediaPlayer::playbackStateChanged, this, &VideoPlayer::updateTransport);
-    connect(player_, &QMediaPlayer::mediaStatusChanged, this, &VideoPlayer::updateTransport);
-    connect(player_, &QMediaPlayer::errorOccurred, this, &VideoPlayer::updateTransport);
+    connect(player_, &Playback::positionChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &Playback::durationChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &Playback::seekableChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &Playback::playbackStateChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &Playback::mediaStatusChanged, this, &VideoPlayer::updateTransport);
+    connect(player_, &Playback::errorOccurred, this, &VideoPlayer::updateTransport);
     const auto shortcut = [this](const QKeySequence& key, auto action) {
         auto* binding = new QShortcut(key, surface_);
         binding->setContext(Qt::WidgetWithChildrenShortcut);
@@ -299,8 +327,10 @@ VideoPlayer::~VideoPlayer() {
     disconnect(video_, nullptr, this, nullptr);
     disconnect(player_, nullptr, this, nullptr);
     player_->stop();
+#ifndef Q_OS_WASM
     player_->setVideoOutput(nullptr);
     player_->setAudioOutput(nullptr);
+#endif
 }
 
 void VideoPlayer::setSource(const QUrl& source) {
@@ -374,26 +404,35 @@ void VideoPlayer::updateTransport() {
         play_->setToolTip(playLabel);
         play_->setIcon(mediaIcon(player_->isPlaying() ? MediaGlyph::Pause : MediaGlyph::Play));
     }
-    const auto state = player_->mediaStatus();
-    play_->setEnabled(!renderingFailed_ && state != QMediaPlayer::NoMedia && state != QMediaPlayer::InvalidMedia);
+    const auto state = shadcn::detail::mediaStatus(*player_);
+    const auto failed = shadcn::detail::hasError(*player_);
+    play_->setEnabled(!renderingFailed_ && state != MediaStatus::NoMedia && state != MediaStatus::Invalid);
     QString message;
     if (renderingFailed_)
         message = tr("Cannot display video with the current graphics backend.");
-    else if (player_->error() != QMediaPlayer::NoError)
-        message = tr("Cannot play this video. %1").arg(player_->errorString());
-    else if (state == QMediaPlayer::NoMedia) message = tr("Choose a video to start.");
-    else if (state == QMediaPlayer::LoadingMedia) message = tr("Loading video…");
-    else if (state == QMediaPlayer::StalledMedia || state == QMediaPlayer::BufferingMedia)
+    else if (failed)
+        message = tr("Cannot play this video. %1").arg(shadcn::detail::errorText(*player_));
+    else if (state == MediaStatus::NoMedia) message = tr("Choose a video to start.");
+    else if (state == MediaStatus::Loading) message = tr("Loading video…");
+    else if (state == MediaStatus::Stalled || state == MediaStatus::Buffering)
         message = tr("Buffering…");
     status_->setText(message);
     status_->setVisible(!message.isEmpty());
-    open_->setVisible(!renderingFailed_ && (state == QMediaPlayer::NoMedia || state == QMediaPlayer::InvalidMedia ||
-                      player_->error() != QMediaPlayer::NoError));
-    open_->setText(player_->error() == QMediaPlayer::NoError ? tr("Open video") : tr("Open another file"));
+#ifndef Q_OS_WASM
+    // A browser cannot open a local file, so the picker is only offered where one exists.
+    open_->setVisible(!renderingFailed_ && (state == MediaStatus::NoMedia || state == MediaStatus::Invalid ||
+                      failed));
+    open_->setText(failed ? tr("Open another file") : tr("Open video"));
+#endif
     message_->setVisible(!message.isEmpty());
 }
 
 void VideoPlayer::openFile() {
+    // A browser cannot hand a local path to a media element, so the picker is only
+    // offered where a native file dialog exists.
+#ifdef Q_OS_WASM
+    return;
+#else
     if (fileDialog_) {
         fileDialog_->raise();
         fileDialog_->activateWindow();
@@ -411,13 +450,16 @@ void VideoPlayer::openFile() {
         if (alive) player_->play();
     });
     dialog->open();
+#endif
 }
 
 void VideoPlayer::showSettings() {
     auto* menu = new QMenu(surface_);
     menu->setAttribute(Qt::WA_DeleteOnClose);
+#ifndef Q_OS_WASM
     connect(menu->addAction(tr("Open video…")), &QAction::triggered, this, &VideoPlayer::openFile);
     menu->addSeparator();
+#endif
     auto* speed = menu->addMenu(tr("Speed"));
     auto* rates = new QActionGroup(speed);
     for (const auto rate : {.5, .75, 1., 1.25, 1.5, 2.}) {
@@ -427,7 +469,7 @@ void VideoPlayer::showSettings() {
         rates->addAction(action);
         connect(action, &QAction::triggered, this, [this, rate] { player_->setPlaybackRate(rate); });
     }
-    const auto tracks = [this, menu](const QString& title, const QList<QMediaMetaData>& list,
+    const auto tracks = [this, menu](const QString& title, const std::vector<TrackInfo>& list,
                                    int active, bool subtitles) {
         auto* submenu = menu->addMenu(title);
         auto* group = new QActionGroup(submenu);
@@ -442,21 +484,23 @@ void VideoPlayer::showSettings() {
             });
         };
         if (subtitles) add(tr("Off"), -1);
-        for (qsizetype i = 0; i < list.size(); ++i) {
-            auto label = list[i].stringValue(QMediaMetaData::Title);
-            if (label.isEmpty()) label = list[i].stringValue(QMediaMetaData::Language);
-            if (label.isEmpty()) label = tr("Track %1").arg(i + 1);
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            auto label = list[i].title;
+            if (label.isEmpty()) label = list[i].language;
+            if (label.isEmpty()) label = tr("Track %1").arg(static_cast<qsizetype>(i) + 1);
             add(label, static_cast<int>(i));
         }
-        submenu->setEnabled(!list.isEmpty());
+        submenu->setEnabled(!list.empty());
     };
-    tracks(tr("Audio"), player_->audioTracks(), player_->activeAudioTrack(), false);
-    tracks(tr("Captions"), player_->subtitleTracks(), player_->activeSubtitleTrack(), true);
+    tracks(tr("Audio"), shadcn::detail::trackInfos(*player_, TrackKind::Audio),
+           player_->activeAudioTrack(), false);
+    tracks(tr("Captions"), shadcn::detail::trackInfos(*player_, TrackKind::Subtitles),
+           player_->activeSubtitleTrack(), true);
     auto* loop = menu->addAction(tr("Loop"));
     loop->setCheckable(true);
-    loop->setChecked(player_->loops() == QMediaPlayer::Infinite);
+    loop->setChecked(shadcn::detail::isLooping(*player_));
     connect(loop, &QAction::toggled, this, [this](bool enabled) {
-        player_->setLoops(enabled ? QMediaPlayer::Infinite : QMediaPlayer::Once);
+        shadcn::detail::setLooping(*player_, enabled);
     });
     auto* fill = menu->addAction(tr("Fill frame"));
     fill->setCheckable(true);
