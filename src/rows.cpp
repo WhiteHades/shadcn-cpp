@@ -240,6 +240,31 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
             QRect(right - side, option.rect.top() + (option.rect.height() - side) / 2, side, side),
             trailing);
     }
+
+    // The track sits at the row's foot, under the text block rather than beside
+    // it, so it reads as belonging to the whole row. It is drawn only when the
+    // caller said these rows carry progress, and only when the row reports some: a
+    // rail on a row that has nothing to state says something the data does not say.
+    if (progressShown_) {
+        const auto value = rowData(index, RowRole::Progress).toDouble();
+        const auto rail = QRectF(x, option.rect.bottom() - rowInset(compact_) / 2 - 4,
+                                 std::max(0, right - x), 4.0);
+        const auto corner = 2.0;
+        // The rail is the primary at a fifth of its strength, not the muted fill.
+        // Muted in the light theme is very nearly the page, so a rail in muted is not
+        // a track a reader can see. The upstream progress component paints its own
+        // track the same way, from the primary rather than from a neutral.
+        const auto railColour = accentText ? colour(*widget, Role::AccentForeground)
+                                           : withAlpha(colour(*widget, Role::Primary), .22);
+        const auto fillColour = accentText ? colour(*widget, Role::AccentForeground)
+                                           : colour(*widget, Role::Primary);
+        rounded(*painter, rail, corner, railColour);
+        if (value > 0) {
+            const auto filled = std::clamp(value, 0.0, 1.0);
+            rounded(*painter, QRectF(rail.topLeft(), QSizeF(rail.width() * filled, rail.height())),
+                    corner, fillColour);
+        }
+    }
     painter->restore();
 }
 
