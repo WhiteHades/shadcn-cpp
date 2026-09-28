@@ -24,6 +24,7 @@ enum class RowRole : int {
     Leading,                          ///< A `QPixmap` drawn before the text.
     Trailing,                         ///< A `QPixmap` drawn after the text.
     TrailingText,                     ///< A short muted label on the trailing side.
+    Progress,                         ///< A `double` from 0 to 1, drawn as a track.
     Heading,                          ///< A row that labels the rows under it, not a target.
 };
 
@@ -39,6 +40,15 @@ class RowDelegate final : public QStyledItemDelegate {
     /// dense. It is the same row at a different density, not a different row.
     void setCompact(bool compact);
     [[nodiscard]] bool compact() const noexcept { return compact_; }
+    /// Whether rows reserve room for a progress track.
+    ///
+    /// The height is uniform, so a track cannot appear on some rows and not others:
+    /// the view has to know the answer before the first row is measured, and it can
+    /// only know it from the caller. A caller whose rows all report progress turns
+    /// this on; a caller whose rows report none leaves it off, and no row then draws
+    /// an empty rail.
+    void setProgressShown(bool shown) { progressShown_ = shown; }
+    [[nodiscard]] bool progressShown() const noexcept { return progressShown_; }
     /// The height one row occupies at the current density, for a caller doing its
     /// own scrolling. It reads the delegate's own font, so a view hands it the
     /// view's font and the two agree.
@@ -54,6 +64,7 @@ class RowDelegate final : public QStyledItemDelegate {
 
   private:
     bool compact_ = false;
+    bool progressShown_ = false;
     QFont font_;
 };
 
@@ -90,6 +101,12 @@ class ListView : public QListView {
     [[nodiscard]] bool compactRows() const noexcept { return delegate_->compact(); }
     void setCompactBelow(int height);
     [[nodiscard]] int compactBelow() const noexcept { return density_.compactBelow(); }
+    /// Reserves room for a progress track on every row. See
+    /// `RowDelegate::setProgressShown` for why this belongs to the caller.
+    void showProgress() { setProgressVisible(true); }
+    void hideProgress() { setProgressVisible(false); }
+    void setProgressVisible(bool visible);
+    [[nodiscard]] bool progressVisible() const noexcept { return delegate_->progressShown(); }
     /// The height one row occupies at the current density.
     [[nodiscard]] int rowHeight() const { return delegate_->rowHeight(); }
     /// The rectangles of the rows on screen, in order, for a test or a hit check.
@@ -114,6 +131,12 @@ class TreeView : public QTreeView {
     [[nodiscard]] bool compactRows() const noexcept { return delegate_->compact(); }
     void setCompactBelow(int height);
     [[nodiscard]] int compactBelow() const noexcept { return density_.compactBelow(); }
+    /// Reserves room for a progress track on every row. See
+    /// `RowDelegate::setProgressShown` for why this belongs to the caller.
+    void showProgress() { setProgressVisible(true); }
+    void hideProgress() { setProgressVisible(false); }
+    void setProgressVisible(bool visible);
+    [[nodiscard]] bool progressVisible() const noexcept { return delegate_->progressShown(); }
     /// The height one row occupies at the current density.
     [[nodiscard]] int rowHeight() const { return delegate_->rowHeight(); }
     /// The rectangles of the rows on screen, in order, for a test or a hit check.

@@ -116,7 +116,8 @@ int RowDelegate::rowHeight() const {
     // occupies the second line whether or not it has text, so a row does not
     // change height when it gains one.
     const auto line = QFontMetrics(font_).lineSpacing();
-    return std::max(compact_ ? 32 : 44, line * 2 + rowGap(compact_));
+    const auto track = progressShown_ ? line / 2 : 0;
+    return std::max(compact_ ? 32 : 44, line * 2 + rowGap(compact_) + track);
 }
 
 QSize RowDelegate::sizeHint(const QStyleOptionViewItem&, const QModelIndex&) const {
@@ -284,6 +285,14 @@ void ListView::setCompact(bool compact) {
     viewport()->update();
 }
 
+void ListView::setProgressVisible(bool visible) {
+    if (delegate_->progressShown() == visible) return;
+    delegate_->setProgressShown(visible);
+    scheduleDelayedItemsLayout();
+    doItemsLayout();
+    viewport()->update();
+}
+
 void ListView::setCompactBelow(int breakpoint) {
     if (density_.compactBelow() == breakpoint) return;
     density_.setCompactBelow(breakpoint);
@@ -372,6 +381,14 @@ TreeView::TreeView(QWidget* parent) : QTreeView(parent), delegate_(new RowDelega
 void TreeView::setCompact(bool compact) {
     if (delegate_->compact() == compact) return;
     delegate_->setCompact(compact);
+    scheduleDelayedItemsLayout();
+    doItemsLayout();
+    viewport()->update();
+}
+
+void TreeView::setProgressVisible(bool visible) {
+    if (delegate_->progressShown() == visible) return;
+    delegate_->setProgressShown(visible);
     scheduleDelayedItemsLayout();
     doItemsLayout();
     viewport()->update();
