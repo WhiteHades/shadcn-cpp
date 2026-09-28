@@ -278,6 +278,11 @@ ListView::ListView(QWidget* parent) : QListView(parent), delegate_(new RowDelega
 }
 
 void ListView::setCompact(bool compact) {
+    // The caller's own choice takes the setting off the breakpoint. Two owners of one
+    // setting is the bug: while the breakpoint still answers, a resize the caller
+    // never asked for decides the density again, so a chosen row density lasts until
+    // the window happens to be resized.
+    density_.setCompactBelow(0);
     if (delegate_->compact() == compact) return;
     delegate_->setCompact(compact);
     scheduleDelayedItemsLayout();
@@ -379,6 +384,9 @@ TreeView::TreeView(QWidget* parent) : QTreeView(parent), delegate_(new RowDelega
 }
 
 void TreeView::setCompact(bool compact) {
+    // As on the list: the caller's choice takes the setting off the breakpoint, so a
+    // resize cannot decide the density again.
+    density_.setCompactBelow(0);
     if (delegate_->compact() == compact) return;
     delegate_->setCompact(compact);
     scheduleDelayedItemsLayout();
