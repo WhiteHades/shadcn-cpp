@@ -113,8 +113,11 @@ public:
 protected:
     void paintEvent(QPaintEvent*) override;
     void changeEvent(QEvent*) override;
+    bool eventFilter(QObject* object, QEvent* event) override;
 private:
     void updatePalette();
+    /// Keeps a name on the field even when the application supplied only a placeholder.
+    void refreshAccessibleName();
     bool invalid_ = false;
 };
 

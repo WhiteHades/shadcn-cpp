@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Design source: shadcn-ui/ui local stock wrappers and style rules.
 #include <shadcn/controls.hpp>
+#include "focus_ring.hpp"
 
 #include <QApplication>
 #include <QAccessibleWidget>
@@ -1268,6 +1269,10 @@ QPushButton& Breadcrumb::addLink(const QString& text) {
     button->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     button->setFixedHeight(24);
     button->setStyleSheet(QStringLiteral("QPushButton { border: 0; padding: 0; background: transparent; }"));
+    // setFlat and `border: 0` both remove Qt's own focus frame. This link is keyboard
+    // reachable, so without a replacement the focus indicator is gone entirely and a
+    // keyboard user cannot see where they are.
+    new detail::FocusRing(*button);
     auto palette = button->palette();
     palette.setColor(QPalette::ButtonText, muted(*this));
     button->setPalette(palette);

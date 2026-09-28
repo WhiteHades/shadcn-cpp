@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Design source: shadcn-ui/ui radix-nova wrappers and style-nova.css.
 #include <shadcn/navigation.hpp>
+#include "focus_ring.hpp"
 
 #include "glyphs.hpp"
 
@@ -678,7 +679,10 @@ ResizablePanelGroup::ResizablePanelGroup(Qt::Orientation orientation, QWidget* p
     : QSplitter(orientation, parent), orientation_(orientation) {
     setChildrenCollapsible(false);
     setOpaqueResize(true);
-    setHandleWidth(6);
+    // The handle is a pointer target and a keyboard target, so it needs a real target
+    // area. 6px is far below the 24x24 minimum; the visible divider stays 4px and is
+    // painted centred inside a wider handle, so the design reads the same.
+    setHandleWidth(24);
     setFocusPolicy(Qt::StrongFocus);
     setStyleSheet(QStringLiteral("QSplitter::handle { background:%1; }").arg(rgb(colour(*this, Role::Border))));
 }
@@ -716,6 +720,12 @@ ResizableHandle::ResizableHandle(Qt::Orientation orientation, QSplitter* parent)
     : QSplitterHandle(orientation, parent) {
     setFocusPolicy(Qt::StrongFocus);
     setCursor(orientation == Qt::Horizontal ? Qt::SplitHCursor : Qt::SplitVCursor);
+    setAccessibleName(tr("Resize panels"));
+    setAccessibleDescription(orientation == Qt::Horizontal ? tr("Drag or use the arrow keys to resize the panels side by side")
+                                                          : tr("Drag or use the arrow keys to resize the panels top to bottom"));
+    // This handle paints its own divider, so Qt's focus frame is not drawn. Without a
+    // replacement the handle is keyboard reachable and shows nothing on focus.
+    new detail::FocusRing(*this);
 }
 
 void ResizableHandle::paintEvent(QPaintEvent*) {

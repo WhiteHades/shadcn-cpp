@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Design source: shadcn-ui/ui @ 98a1fe67b439324ddc857f47fbdce056600a4329.
 #include <shadcn/widgets.hpp>
+#include "focus_ring.hpp"
 
 #include <QAccessible>
 #include <QApplication>
@@ -105,83 +106,9 @@ Appearance appearance(const Theme& theme, Variant variant, double hover, bool ba
     }
     return {c(Role::Primary), c(Role::PrimaryForeground), clear};
 }
-QColor focusColor(const QWidget& widget) {
-    const auto& theme = themeFor(widget);
-    const auto destructive = widget.property("invalid").toBool() ||
-                             widget.property("shadcnDestructive").toBool();
-    return alpha(color(theme, destructive ? Role::Destructive : Role::Ring),
-                 destructive ? (theme.mode() == ColorMode::Dark ? .4 : .2) : .5);
-}
-
-// QFocusFrame follows its target and paints beyond the target's bounds.
-// QPointer protects the observer if the target is destroyed before a queued event.
-class FocusRing final : public QFocusFrame {
-public:
-    explicit FocusRing(QWidget& target, bool textInput = false)
-        : QFocusFrame(&target), target_(&target), always_(textInput) {
-        setAttribute(Qt::WA_TransparentForMouseEvents);
-        setFocusPolicy(Qt::NoFocus);
-        setWidget(&target);
-        target.installEventFilter(this);
-        QObject::connect(&target, &QObject::destroyed, this, &QObject::deleteLater);
-        hide();
-    }
-protected:
-    bool eventFilter(QObject* object, QEvent* event) override {
-        const auto result = QFocusFrame::eventFilter(object, event);
-        if (!target_ || object != target_) return result;
-        if (event->type() == QEvent::ParentChange || event->type() == QEvent::StyleChange) {
-            // A widget may have been parentless when the component was constructed.
-            // Rebind after parenting or style changes. Keep observing unsupported
-            // top-level targets so a later move into a layout starts tracking again.
-            setWidget(nullptr);
-            setWidget(target_.data());
-            target_->installEventFilter(this);
-        }
-        if (event->type() == QEvent::FocusIn)
-            keyboard_ = static_cast<QFocusEvent*>(event)->reason() != Qt::MouseFocusReason;
-        if (event->type() == QEvent::DynamicPropertyChange) {
-            const auto name = static_cast<QDynamicPropertyChangeEvent*>(event)->propertyName();
-            if (name != "shadcnInvalid" && name != "shadcnDestructive") return result;
-        }
-        switch (event->type()) {
-        case QEvent::DynamicPropertyChange:
-        case QEvent::FocusIn: case QEvent::FocusOut: case QEvent::Show: case QEvent::Hide:
-        case QEvent::Move: case QEvent::Resize: case QEvent::EnabledChange:
-        case QEvent::StyleChange: case QEvent::PaletteChange: case QEvent::ParentChange: {
-            const auto visible = target_->hasFocus() && target_->isVisible() && target_->isEnabled()
-                                 && (always_ || keyboard_);
-            target_->setProperty("shadcnFocusVisible", visible);
-            const auto invalid = target_->property("shadcnInvalid").toBool();
-            setVisible((visible || invalid) && target_->isVisible()
-                       && widget() == target_.data());
-            target_->update();
-            update();
-            break;
-        }
-        default: break;
-        }
-        return result;
-    }
-    void paintEvent(QPaintEvent*) override {
-        if (!target_ || widget() != target_.data() || !parentWidget()) return;
-        QPainter painter(this);
-        if (!target_->isEnabled()) painter.setOpacity(.5);
-        painter.setRenderHint(QPainter::Antialiasing);
-        const auto origin = target_->mapTo(parentWidget(), QPoint(0, 0)) - pos();
-        auto bounds = QRectF(QPointF(origin), QSizeF(target_->size()));
-        bounds.adjust(-.75, -.75, .75, .75);
-        const auto radius = std::min(radiusFor(*target_),
-                                    std::min(target_->width(), target_->height()) / 2.0);
-        painter.setPen(QPen(focusColor(*target_), 1.5));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(bounds, radius + .75, radius + .75);
-    }
-private:
-    QPointer<QWidget> target_;
-    bool always_ = false;
-    bool keyboard_ = false;
-};
+// FocusRing now lives in src/focus_ring.hpp so every translation unit that suppresses
+// Qt's own focus painting can share one implementation.
+using detail::FocusRing;
 
 void animate(QVariantAnimation& animation, QWidget& widget, double current, double target) {
     animation.stop();
@@ -436,6 +363,38 @@ Input::Input(QWidget* parent) : QLineEdit(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     updatePalette();
     new FocusRing(*this, true);
+    // A field with no accessible name is announced as an unnamed edit. A visible Label with
+    // setBuddy is the intended label and Qt exposes it as the name. Where an application
+    // supplies only a placeholder, use that as the name rather than leaving the control
+    // silent, and say in the description that it is a placeholder so it is not mistaken for
+    // a persistent label. QLineEdit has no placeholder notifier, so refresh when the field
+    // is shown and when it takes focus.
+    installEventFilter(this);
+    refreshAccessibleName();
+}
+bool Input::eventFilter(QObject* object, QEvent* event) {
+    if (object == this
+        && (event->type() == QEvent::Show || event->type() == QEvent::FocusIn))
+        refreshAccessibleName();
+    return QLineEdit::eventFilter(object, event);
+}
+void Input::refreshAccessibleName() {
+    if (!accessibleName().isEmpty())
+        return;
+    // QLabel::buddy is a member, so find the label that names this field. Siblings share a
+    // parent, which is where a form puts them.
+    if (auto* parent = parentWidget()) {
+        for (auto* sibling : parent->findChildren<QLabel*>(QString(), Qt::FindDirectChildrenOnly)) {
+            if (sibling->buddy() != this || sibling->text().isEmpty()) continue;
+            setAccessibleName(sibling->text());
+            return;
+        }
+    }
+    if (placeholderText().isEmpty())
+        return;
+    setAccessibleName(placeholderText());
+    if (accessibleDescription().isEmpty())
+        setAccessibleDescription(tr("Placeholder, not a visible label"));
 }
 void Input::updatePalette() {
     const auto& theme = themeFor(*this);
@@ -733,7 +692,11 @@ Card::Card(QWidget* parent) : QFrame(parent) {
     content_->setContentsMargins(16,0,16,0); content_->setSpacing(12);
     outer->addWidget(contentHost_); contentHost_->hide();
     footerHost_ = new QWidget(this); footer_ = new QHBoxLayout(footerHost_);
-    footer_->setContentsMargins(16,16,16,16); footer_->setSpacing(8);
+    // Sections contribute horizontal padding only. The outer layout owns the vertical
+    // padding and the gaps, as it does for the header and content. A footer that also
+    // padded itself vertically would add to the outer margin and leave a band of dead
+    // space below the footer row, which reads as a chin.
+    footer_->setContentsMargins(16,0,16,0); footer_->setSpacing(8);
     outer->addWidget(footerHost_); footerHost_->hide();
     updatePalette();
 }

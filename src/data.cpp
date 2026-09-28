@@ -19,6 +19,7 @@
 #include <cmath>
 #include <numbers>
 #include <shadcn/data.hpp>
+#include "focus_ring.hpp"
 #include <stdexcept>
 
 namespace shadcn {
@@ -160,6 +161,14 @@ Combobox::Combobox(QWidget* parent) : Select(parent) {
     lineEdit()->setClearButtonEnabled(true);
     lineEdit()->setTextMargins(6, 0, 0, 0);
     lineEdit()->setStyleSheet("QLineEdit { background: transparent; border: none; }");
+    // The editable field is its own focusable control inside the combo, so it needs its own
+    // name. Without one it is announced as an unnamed edit, and the combo's own name does
+    // not cover it. QLineEditIconButton is Qt's clear affordance and also needs a name.
+    lineEdit()->setAccessibleName(tr("Search"));
+    if (auto* clear = lineEdit()->findChild<QAbstractButton*>(
+                QStringLiteral("qt_clear_button"), Qt::FindDirectChildrenOnly)) {
+        clear->setAccessibleName(tr("Clear the search field"));
+    }
     completer()->setCompletionMode(QCompleter::PopupCompletion);
     completer()->setCaseSensitivity(Qt::CaseInsensitive);
     completer()->setFilterMode(Qt::MatchContains);
@@ -355,6 +364,16 @@ void Calendar::refreshTheme() {
             button->setArrowType(Qt::NoArrow);
             button->setIcon(QIcon(image));
             button->setIconSize(QSize(16, 16));
+            // Qt gives these buttons Qt::NoFocus, so the only way to change month is a
+            // pointer. Give them a place in the tab order, a name and a ring, so the
+            // calendar is operable without a mouse. The chevron replaces the stock arrow,
+            // so the name has to be supplied here.
+            button->setFocusPolicy(Qt::StrongFocus);
+            button->setAccessibleName(previous ? tr("Previous month") : tr("Next month"));
+            button->setAccessibleDescription(
+                    previous ? tr("Show the previous month") : tr("Show the next month"));
+            button->setMinimumSize(32, 32);
+            new detail::FocusRing(*button);
         }
     }
     updateCells();
@@ -710,7 +729,10 @@ Chart::Chart(QWidget* parent)
     refreshTooltip();
     animation_->setStartValue(0.0);
     animation_->setEndValue(1.0);
-    animation_->setDuration(500);
+    // A tooltip is triggered by hover, so it is a high-frequency interaction. The
+    // prescription for those is instant feedback or a transition of 150ms or less;
+    // the previous 500ms read as lag between pointing and reading.
+    animation_->setDuration(150);
     animation_->setEasingCurve(QEasingCurve::OutCubic);
     connect(animation_, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
         amount_ = value.toDouble();

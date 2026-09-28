@@ -107,22 +107,33 @@ double pulse_opacity(double seconds) noexcept {
 
 Theme Theme::neutral(ColorMode mode) {
     // Source: shadcn-ui/ui @ 98a1fe6, apps/v4/registry/themes.ts, neutral.
+    //
+    // Four tokens are moved from the upstream values so the measured contrast of the pairs
+    // that matter clears its requirement. Each is the smallest move that clears it, solved
+    // against the library's own oklch conversion rather than by eye, and each keeps the hue
+    // at zero so nothing shifts colour. MutedForeground on the muted fill was 4.34:1 against
+    // 4.5 required. The light Ring was 2.59:1 and the light SidebarRing 2.48:1 against 3:1
+    // required of a focus indicator. The light Input boundary was 1.26:1 and the dark one
+    // 1.47:1 against the 3:1 that identifies a control boundary; the dark token is white, so
+    // it is raised in opacity rather than in lightness. The decorative Border and
+    // SidebarBorder tokens are hairlines that identify nothing and are left as they are.
+    // docs/performance.md and docs/verification.md record the measurements.
     Theme theme;
     theme.mode_ = mode;
     constexpr std::array<Oklch, 31> light{{
         {1,0,0}, {.145,0,0}, {1,0,0}, {.145,0,0}, {1,0,0}, {.145,0,0},
         {.205,0,0}, {.985,0,0}, {.97,0,0}, {.205,0,0},
-        {.97,0,0}, {.556,0,0}, {.97,0,0}, {.205,0,0}, {.577,.245,27.325},
-        {.922,0,0}, {.922,0,0}, {.708,0,0},
+        {.97,0,0}, {.545,0,0}, {.97,0,0}, {.205,0,0}, {.577,.245,27.325},
+        {.922,0,0}, {.667,0,0}, {.667,0,0},
         {.87,0,0}, {.556,0,0}, {.439,0,0}, {.371,0,0}, {.269,0,0},
         {.985,0,0}, {.145,0,0}, {.205,0,0}, {.985,0,0},
-        {.97,0,0}, {.205,0,0}, {.922,0,0}, {.708,0,0}
+        {.97,0,0}, {.205,0,0}, {.922,0,0}, {.656,0,0}
     }};
     constexpr std::array<Oklch, 31> dark{{
         {.145,0,0}, {.985,0,0}, {.205,0,0}, {.985,0,0}, {.205,0,0}, {.985,0,0},
         {.922,0,0}, {.205,0,0}, {.269,0,0}, {.985,0,0},
         {.269,0,0}, {.708,0,0}, {.269,0,0}, {.985,0,0}, {.704,.191,22.216},
-        {1,0,0,.1}, {1,0,0,.15}, {.556,0,0},
+        {1,0,0,.1}, {1,0,0,.34}, {.556,0,0},
         {.87,0,0}, {.556,0,0}, {.439,0,0}, {.371,0,0}, {.269,0,0},
         {.205,0,0}, {.985,0,0}, {.488,.243,264.376}, {.985,0,0},
         {.269,0,0}, {.985,0,0}, {1,0,0,.1}, {.556,0,0}
