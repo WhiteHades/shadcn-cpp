@@ -8,3 +8,4 @@
 #include <shadcn/navigation.hpp>
 #include <shadcn/data.hpp>
 #include <shadcn/feedback.hpp>
+#include <shadcn/rows.hpp>

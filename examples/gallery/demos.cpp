@@ -30,7 +30,7 @@ QStringList components() {
                       "sidebar", "navigation-menu", "menubar", "dropdown-menu", "context-menu",
                       "carousel", "pagination", "direction", "toast", "sonner", "attachment",
                       "bubble", "message", "message-scroller", "questionnaire", "marker", "button-ripple",
-                      "heatmap"};
+                      "heatmap", "list-view", "tree-view", "prose"};
     names.sort();
 #ifdef SHADCN_GALLERY_MEDIA
     // The player is an optional component, so it only joins the gallery when the media
@@ -674,6 +674,80 @@ QWidget* demo(const QString& name, QWidget* parent) {
         (void)heatmap->setDays(days);
         heatmap->setMaximum(96);
         layout->addWidget(heatmap);
+    } else if (name == "list-view") {
+        // A course list: the shapes a library actually fills rows with, and one
+        // heading row among them so the heading treatment is visible.
+        auto* list = new ListView(host);
+        list->setFixedSize(400, 320);
+        list->setCompactBelow(260);
+        auto* model = new QStandardItemModel(list);
+        const auto row = [](const QString& title, const QString& description,
+                            const QString& trailing) {
+            auto* item = new QStandardItem(title);
+            item->setData(description, static_cast<int>(RowRole::Description));
+            item->setData(trailing, static_cast<int>(RowRole::TrailingText));
+            return item;
+        };
+        auto* heading = new QStandardItem(QStringLiteral("In progress"));
+        heading->setData(true, static_cast<int>(RowRole::Heading));
+        heading->setFlags(Qt::ItemIsEnabled);
+        model->appendRow(heading);
+        model->appendRow(row(QStringLiteral("Systems 101"), QStringLiteral("Lesson 4 of 12"), QStringLiteral("41%")));
+        model->appendRow(row(QStringLiteral("Signals 201"), QStringLiteral("Lesson 2 of 9"), QStringLiteral("22%")));
+        model->appendRow(row(QStringLiteral("Probability 150"), QStringLiteral("Lesson 11 of 14"), QStringLiteral("79%")));
+        model->appendRow(row(QStringLiteral("Linear Algebra"), QStringLiteral("Lesson 1 of 20"), QStringLiteral("5%")));
+        model->appendRow(row(QStringLiteral("Compilers 310"), QStringLiteral("Lesson 7 of 8"), QStringLiteral("88%")));
+        list->setModel(model);
+        list->setCurrentIndex(model->index(2, 0));
+        layout->addWidget(list);
+    } else if (name == "tree-view") {
+        // A course outline: a branch with children, a branch that is collapsed, a
+        // heading, and a leaf, so expansion, indentation and the heading treatment
+        // are all visible at once.
+        auto* outline = new TreeView(host);
+        outline->setFixedSize(400, 300);
+        auto* model = new QStandardItemModel(outline);
+        model->setHorizontalHeaderLabels({});
+        const auto lesson = [](const QString& title, const QString& trailing) {
+            auto* item = new QStandardItem(title);
+            item->setData(trailing, static_cast<int>(RowRole::TrailingText));
+            return item;
+        };
+        auto* heading = new QStandardItem(QStringLiteral("Systems 101"));
+        heading->setData(true, static_cast<int>(RowRole::Heading));
+        heading->setFlags(Qt::ItemIsEnabled);
+        model->appendRow(heading);
+        auto* first = new QStandardItem(QStringLiteral("01 Introduction"));
+        first->appendRow(lesson(QStringLiteral("Overview"), QStringLiteral("12:04")));
+        first->appendRow(lesson(QStringLiteral("What a system is"), QStringLiteral("18:22")));
+        model->appendRow(first);
+        auto* second = new QStandardItem(QStringLiteral("02 Signals"));
+        second->appendRow(lesson(QStringLiteral("Amplitude"), QStringLiteral("09:41")));
+        second->appendRow(lesson(QStringLiteral("Frequency"), QStringLiteral("21:07")));
+        model->appendRow(second);
+        outline->setModel(model);
+        // Row 0 is the heading, so the first branch is row 1. Expanding the wrong
+        // row is silent, and the demo then shows two collapsed branches.
+        outline->expand(model->index(1, 0));
+        layout->addWidget(outline);
+    } else if (name == "prose") {
+        // A lesson body: a heading, prose, a list, code and a link, so the type
+        // scale and the block spacing are both visible.
+        auto* prose = new Prose(host);
+        prose->setFixedSize(420, 320);
+        prose->setHtml(QStringLiteral(
+            "<h1>Lesson 4</h1>"
+            "<p>A system takes an input, does something to it, and produces an "
+            "output. The middle part is where the interesting decisions live, and "
+            "it is the part most systems are bad at describing.</p>"
+            "<h2>In this lesson</h2>"
+            "<ul><li>What an input and an output are</li>"
+            "<li>Why the middle is the hard part</li>"
+            "<li>One worked example</li></ul>"
+            "<p>The worked example, in short:</p>"
+            "<pre><code>signal -&gt; process -&gt; response</code></pre>"
+            "<p>Read <a href=\"#\">the notes for lesson 3</a> first if you have not.</p>"));
+        layout->addWidget(prose);
     }
     return canvas;
 }

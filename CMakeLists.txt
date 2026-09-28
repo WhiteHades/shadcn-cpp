@@ -49,9 +49,9 @@ set(shadcn_targets shadcn_core)
 
 if(SHADCN_BUILD_WIDGETS)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets)
-    add_library(shadcn_widgets STATIC src/widgets.cpp src/overlays.cpp src/controls.cpp src/data.cpp src/navigation.cpp src/feedback.cpp
+    add_library(shadcn_widgets STATIC src/widgets.cpp src/overlays.cpp src/controls.cpp src/data.cpp src/navigation.cpp src/feedback.cpp src/rows.cpp
         include/shadcn/widgets.hpp include/shadcn/overlays.hpp include/shadcn/controls.hpp include/shadcn/data.hpp
-        include/shadcn/navigation.hpp include/shadcn/feedback.hpp assets/fonts/fonts.qrc)
+        include/shadcn/navigation.hpp include/shadcn/feedback.hpp include/shadcn/rows.hpp assets/fonts/fonts.qrc)
     add_library(shadcn::widgets ALIAS shadcn_widgets)
     set_target_properties(shadcn_widgets PROPERTIES AUTOMOC ON AUTORCC ON EXPORT_NAME widgets)
     shadcn_target(shadcn_widgets)
@@ -138,7 +138,7 @@ if(SHADCN_BUILD_TESTS)
         target_link_libraries(shadcn_overlays_test PRIVATE shadcn::widgets Qt6::Test)
         add_test(NAME overlays COMMAND shadcn_overlays_test)
         set_tests_properties(overlays PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-        foreach(group IN ITEMS controls data navigation feedback)
+        foreach(group IN ITEMS controls data navigation feedback rows)
             add_executable(shadcn_${group}_test tests/${group}_test.cpp)
             set_target_properties(shadcn_${group}_test PROPERTIES AUTOMOC ON)
             shadcn_target(shadcn_${group}_test)
