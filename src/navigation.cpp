@@ -857,9 +857,6 @@ QPushButton& sidebarMenuButton(const QWidget* rail, QVBoxLayout* into, const QSt
     // The label is kept as a property because an item with an icon clears its text,
     // and the accessible name still has to say what the item is.
     button->setProperty("shadcnSidebarText", text);
-    // The variant is kept so the rail can rebuild an item's sheet when the theme
-    // changes, rather than repainting an item that is still wearing the old colours.
-    button->setProperty("shadcnSidebarVariant", static_cast<int>(variant));
     const auto height = size == SidebarMenuSize::Sm ? 28 : size == SidebarMenuSize::Lg ? 48 : 32;
     // Fixed in both height and policy, and not merely a minimum height. A button with
     // only a minimum grows to fill whatever the rail has, and a layout that shares
@@ -925,17 +922,7 @@ void Sidebar::paintEvent(QPaintEvent*) {
 
 bool Sidebar::event(QEvent* event) {
     const auto result = QFrame::event(event);
-    if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
-        // The items carry a style sheet built from theme roles, so a theme change has
-        // to rebuild it. Repainting alone leaves every item wearing the colours of the
-        // mode the rail was built in, and a rail that switches to dark keeps its
-        // light accents: the open item stays a near-white block on a near-black page.
-        for (auto* button : findChildren<QPushButton*>())
-            if (!button->property("shadcnSidebarVariant").isNull())
-                button->setStyleSheet(sidebarMenuButtonSheet(
-                    this, static_cast<SidebarMenuVariant>(button->property("shadcnSidebarVariant").toInt())));
-        update();
-    }
+    if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) update();
     return result;
 }
 
