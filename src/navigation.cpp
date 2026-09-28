@@ -916,7 +916,6 @@ void Sidebar::updateWidth(bool animate) {
 }
 
 void Sidebar::paintEvent(QPaintEvent*) {
-    restyleItems();
     QPainter painter(this);
     const auto fill = variant_ == SidebarVariant::Inset ? colour(*this, Role::Background)
                                                         : colour(*this, Role::Sidebar);
@@ -927,11 +926,13 @@ void Sidebar::paintEvent(QPaintEvent*) {
 bool Sidebar::event(QEvent* event) {
     const auto result = QFrame::event(event);
     if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
-        // The items' sheets are rebuilt when the rail next paints, not here. A style
-        // change is delivered while the new style is still being installed, so
-        // reading the theme inside the handler can hand back the old one and rebuild
-        // an item with the colours it was just meant to lose. By paint time the
-        // style has settled, so the read is the one that counts.
+        // Rebuilt here, and not during the paint below. Setting a child's sheet from
+        // inside the parent's paint event leaves that child repainting a frame later,
+        // so a caller that renders once sees the item still wearing the old mode. A
+        // style change is the right moment: the items are repainted afterwards
+        // anyway, and the rebuild is guarded by the value comparison below, so a
+        // change that turns out to be no change costs nothing.
+        restyleItems();
         update();
     }
     return result;
