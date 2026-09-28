@@ -266,6 +266,9 @@ class Heatmap : public QWidget {
     void setSelectedCell(QPoint cell);
     /// The accessible text for one cell, or an empty string when it is empty.
     [[nodiscard]] QString cellText(QPoint cell) const;
+    /// The week column and weekday row holding a date, or an invalid point when
+    /// the grid does not hold it.
+    [[nodiscard]] QPoint cellFor(const QDate& date) const;
     /// The axis label drawn for a weekday row, empty when labels are hidden.
     [[nodiscard]] QString weekdayLabel(int row) const;
     void setAccessiblePrefix(const QString& prefix);

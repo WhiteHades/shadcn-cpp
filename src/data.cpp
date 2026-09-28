@@ -1206,6 +1206,13 @@ QColor Heatmap::levelColour(int level) const {
     return mix(colour(*this, Role::Muted), primary, step);
 }
 
+QPoint Heatmap::cellFor(const QDate& date) const {
+    const auto* entry = cellForDate(date);
+    if (!entry || !entry->filled) return {-1, -1};
+    const auto offset = int(entry - cells_.data());
+    return {offset / 7, offset % 7};
+}
+
 QString Heatmap::cellText(QPoint cell) const {
     const auto* entry = cellAt(cell);
     if (!entry || !entry->filled) return {};
