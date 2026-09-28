@@ -304,7 +304,11 @@ void Button::keyPressEvent(QKeyEvent* event) {
 }
 void Button::paintEvent(QPaintEvent*) {
     QPainter painter(this);
-    if (isDown() && !menu()) painter.translate(0, 1);
+    // The stock active state moves the surface down a pixel. Translating the painter would
+    // push it past this widget's own edge, and Qt clips a widget to its own rect, so the
+    // bottom pixel of the shape was cut off on every press. The surface and its contents are
+    // moved down inside the widget instead, which reads the same and stays inside.
+    const auto press = isDown() && !menu() ? 1 : 0;
     const auto& theme = themeFor(*this);
     auto look = appearance(theme, variant_, hoverAmount_);
     if (invalid_) look.border = color(theme, Role::Destructive);
@@ -314,7 +318,10 @@ void Button::paintEvent(QPaintEvent*) {
     const auto radius = size_ == ButtonSize::Xs || size_ == ButtonSize::Sm ||
                         size_ == ButtonSize::IconXs || size_ == ButtonSize::IconSm
         ? theme.radius() * .8 : radiusFor(*this);
-    rounded(painter, QRectF(rect()).adjusted(.5, .5, -.5, -.5), radius, look.fill, look.border);
+    // Shortened by the press offset at the top, so the bottom edge never moves and nothing
+    // is clipped.
+    rounded(painter, QRectF(rect()).adjusted(.5, .5 + press, -.5, -.5), radius, look.fill,
+            look.border);
     const auto m = button_metrics(size_);
     const auto font = buttonFont(*this, size_);
     painter.setFont(font);
@@ -331,15 +338,15 @@ void Button::paintEvent(QPaintEvent*) {
     const auto rtl = layoutDirection() == Qt::RightToLeft;
     if (iconWidth) {
         const auto x = rtl ? start + textWidth + gap : start;
-        icon().paint(&painter, QRect(x, (height() - iconWidth) / 2, iconWidth, iconWidth),
+        icon().paint(&painter, QRect(x, (height() - iconWidth) / 2 + press, iconWidth, iconWidth),
                      Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled,
                      isChecked() ? QIcon::On : QIcon::Off);
     }
     const auto x = rtl ? start : start + iconWidth + gap;
-    const QRect textRect(x, 0, textWidth, height());
+    const QRect textRect(x, press, textWidth, height() - press);
     painter.drawText(textRect, Qt::AlignCenter | Qt::TextShowMnemonic, visibleText);
     if (variant_ == Variant::Link && hoverAmount_ > .5 && !visibleText.isEmpty()) {
-        const auto y = (height() - fm.height()) / 2 + fm.ascent() + 4;
+        const auto y = (height() - fm.height()) / 2 + fm.ascent() + 4 + press;
         painter.drawLine(x, y, x + textWidth, y);
     }
     if (!ripples_.empty()) {

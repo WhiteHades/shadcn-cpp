@@ -338,7 +338,17 @@ void Calendar::refreshTheme() {
             child->setStyleSheet(
                 QString("QWidget#qt_calendar_navigationbar { background: %1; } QToolButton { "
                         "background: transparent; color: %2; border: none; border-radius: 6px; "
-                        "padding: 4px; } QToolButton#qt_calendar_monthbutton { padding-right: 18px; } "
+                        "padding: 4px; } "
+                        // Qt draws a dropdown caret on the month button. The month and the year
+                        // are separate controls here, so that caret lands between them and reads
+                        // as a stray arrow rather than as part of either. The stock calendar puts
+                        // one chevron at the end of a single month-and-year trigger, so the
+                        // indicator is suppressed here rather than left floating mid-bar. The
+                        // button still opens its menu on click.
+                        "QToolButton#qt_calendar_monthbutton { padding-right: 4px; "
+                        "qproperty-menuButtonPopup: false; } "
+                        "QToolButton#qt_calendar_monthbutton::menu-indicator { image: none; "
+                        "width: 0px; height: 0px; } "
                         "QToolButton:hover { background: %3; }")
                     .arg(css(*this, Role::Background), css(*this, Role::Foreground),
                          css(*this, Role::Muted)));
@@ -372,11 +382,15 @@ void Calendar::refreshTheme() {
             // pointer. Give them a place in the tab order, a name and a ring, so the
             // calendar is operable without a mouse. The chevron replaces the stock arrow,
             // so the name has to be supplied here.
+            //
+            // No minimum size is set: the navigation bar stylesheet pads these by 4 pixels,
+            // so a 16 pixel chevron is already a 24 pixel target, which is the minimum.
+            // Forcing them wider pushed them out to the edges of the bar and pulled them
+            // away from the month and year they control.
             button->setFocusPolicy(Qt::StrongFocus);
             button->setAccessibleName(previous ? tr("Previous month") : tr("Next month"));
             button->setAccessibleDescription(
                     previous ? tr("Show the previous month") : tr("Show the next month"));
-            button->setMinimumSize(32, 32);
             new detail::FocusRing(*button);
         }
     }
