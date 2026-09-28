@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 #include "playback.hpp"
-#include "web_playback.hpp"
 
 #include <QTimer>
 #include <algorithm>
@@ -30,8 +29,12 @@ constexpr int FrameInterval = 33;
 constexpr int IdleInterval = 250;
 } // namespace
 
+// Each playback owns one element, so two players on a page do not fight over one source
+// and destroying one does not stop the other. The elements are held in a registry and
+// addressed by the slot C++ is given here.
 EM_JS(int, shadcn_web_media_bridge, (), {
-  if (globalThis.shadcnWebMedia) return 1;
+  var registry = globalThis.shadcnWebMedia;
+  if (!registry) registry = globalThis.shadcnWebMedia = [];
   var video = document.createElement('video');
   video.crossOrigin = 'anonymous';
   video.playsInline = true;
@@ -39,7 +42,9 @@ EM_JS(int, shadcn_web_media_bridge, (), {
   video.volume = 1;
   video.style.cssText =
       'position:absolute;left:-100000px;top:0;width:4px;height:4px;pointer-events:none;';
-  document.body.appendChild(video);
+  // A media element only decodes while it is in the document, so it is parked off-screen
+  // rather than removed from the tree or hidden with display:none.
+  (document.body || document.documentElement).appendChild(video);
   var canvas = document.createElement('canvas');
   var state = {
     video: video,
@@ -49,7 +54,6 @@ EM_JS(int, shadcn_web_media_bridge, (), {
     context: canvas.getContext('2d', {willReadFrequently: true, alpha: false}),
     dirty: true,
   };
-  globalThis.shadcnWebMedia = state;
   // requestVideoFrameCallback marks which frames are new so an unchanged frame is not
   // copied again. A browser without it falls back to copying on every poll.
   if (video.requestVideoFrameCallback) {
@@ -59,21 +63,23 @@ EM_JS(int, shadcn_web_media_bridge, (), {
     };
     video.requestVideoFrameCallback(watch);
   }
-  return 0;
+  registry.push(state);
+  return registry.length - 1;
 });
 
-EM_JS(void, shadcn_web_media_dispose, (), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(void, shadcn_web_media_dispose, (int slot), {
+  var registry = globalThis.shadcnWebMedia;
+  var state = registry && registry[slot];
   if (!state) return;
-  delete globalThis.shadcnWebMedia;
+  registry[slot] = null;
   state.video.pause();
   state.video.removeAttribute('src');
   state.video.load();
   if (state.video.parentNode) state.video.parentNode.removeChild(state.video);
 });
 
-EM_JS(void, shadcn_web_media_load, (const char* url), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(void, shadcn_web_media_load, (int slot, const char* url), {
+  var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (!state) return;
   state.dirty = true;
   var href = url ? UTF8ToString(url) : String();
@@ -88,8 +94,8 @@ EM_JS(void, shadcn_web_media_load, (const char* url), {
   state.video.load();
 });
 
-EM_JS(void, shadcn_web_media_play, (), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(void, shadcn_web_media_play, (int slot), {
+  var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (!state) return;
   // A blocked play() rejects; the poll reports the element's own state, so the rejection
   // is swallowed here rather than left as an unhandled promise.
@@ -97,13 +103,13 @@ EM_JS(void, shadcn_web_media_play, (), {
   if (attempt && attempt.catch) attempt.catch(function() {});
 });
 
-EM_JS(void, shadcn_web_media_pause, (), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(void, shadcn_web_media_pause, (int slot), {
+  var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (state) state.video.pause();
 });
 
-EM_JS(void, shadcn_web_media_seek, (double seconds), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(void, shadcn_web_media_seek, (int slot, double seconds), {
+  var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (!state) return;
   try {
     state.video.currentTime = seconds;
@@ -112,18 +118,18 @@ EM_JS(void, shadcn_web_media_seek, (double seconds), {
   }
 });
 
-EM_JS(void, shadcn_web_media_rate, (double rate), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(void, shadcn_web_media_rate, (int slot, double rate), {
+  var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (state) state.video.playbackRate = rate;
 });
 
-EM_JS(void, shadcn_web_media_loop, (int enabled), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(void, shadcn_web_media_loop, (int slot, int enabled), {
+  var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (state) state.video.loop = enabled !== 0;
 });
 
-EM_JS(void, shadcn_web_media_volume, (double volume, int muted), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(void, shadcn_web_media_volume, (int slot, double volume, int muted), {
+  var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (!state) return;
   state.video.volume = Math.max(0, Math.min(1, volume));
   state.video.muted = muted !== 0;
@@ -135,8 +141,8 @@ EM_JS(void, shadcn_web_media_volume, (double volume, int muted), {
 // Emscripten places an EM_JS body inside the module factory, where HEAP32 and HEAPU8 are
 // the live views. They are addressed directly rather than through Module, because Module
 // only carries them when the build exports them.
-EM_JS(int, shadcn_web_media_poll, (int pixels, int capacity, int* info), {
-  var state = globalThis.shadcnWebMedia;
+EM_JS(int, shadcn_web_media_poll, (int slot, int pixels, int capacity, int* info), {
+  var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (!state) return 0;
   var video = state.video;
   var at = info >> 2;
@@ -176,24 +182,24 @@ bool browserCanFetch(const QUrl& source) {
 } // namespace
 
 WebPlayback::WebPlayback(QObject* parent) : QObject(parent), pump_(new QTimer(this)) {
-    bridge_ = shadcn_web_media_bridge() == 0;
+    slot_ = shadcn_web_media_bridge();
     pump_->setInterval(IdleInterval);
     connect(pump_, &QTimer::timeout, this, &WebPlayback::poll);
 }
 
 WebPlayback::~WebPlayback() {
     pump_->stop();
-    if (bridge_)
-        shadcn_web_media_dispose();
+    if (slot_ >= 0)
+        shadcn_web_media_dispose(slot_);
 }
 
 void WebPlayback::setSource(const QUrl& source) {
-    if (bridge_) {
+    if (slot_ >= 0) {
         const auto url =
             source.isEmpty() || !browserCanFetch(source)
                 ? QByteArray()
                 : source.toString(QUrl::FullyEncoded).toUtf8();
-        shadcn_web_media_load(url.constData());
+        shadcn_web_media_load(slot_, url.constData());
     }
     source_ = source;
     position_ = 0;
@@ -210,13 +216,13 @@ void WebPlayback::setSource(const QUrl& source) {
 void WebPlayback::play() {
     if (source_.isEmpty() || errorCode_ != NoError)
         return;
-    shadcn_web_media_play();
+    shadcn_web_media_play(slot_);
     poll();
 }
 
 void WebPlayback::pause() {
-    if (bridge_)
-        shadcn_web_media_pause();
+    if (slot_ >= 0)
+        shadcn_web_media_pause(slot_);
     poll();
 }
 
@@ -226,22 +232,22 @@ void WebPlayback::stop() {
 }
 
 void WebPlayback::setPosition(qint64 milliseconds) {
-    if (!bridge_ || !seekable_)
+    if (slot_ < 0 || !seekable_)
         return;
-    shadcn_web_media_seek(static_cast<double>(std::clamp<qint64>(milliseconds, 0, duration_)) / 1000.);
+    shadcn_web_media_seek(slot_, static_cast<double>(std::clamp<qint64>(milliseconds, 0, duration_)) / 1000.);
     poll();
 }
 
 void WebPlayback::setPlaybackRate(qreal rate) {
     playbackRate_ = rate;
-    if (bridge_)
-        shadcn_web_media_rate(static_cast<double>(rate));
+    if (slot_ >= 0)
+        shadcn_web_media_rate(slot_, static_cast<double>(rate));
 }
 
 void WebPlayback::setLooping(bool enabled) {
     looping_ = enabled;
-    if (bridge_)
-        shadcn_web_media_loop(enabled ? 1 : 0);
+    if (slot_ >= 0)
+        shadcn_web_media_loop(slot_, enabled ? 1 : 0);
 }
 
 QString WebPlayback::errorText() const {
@@ -262,12 +268,12 @@ QString WebPlayback::errorText() const {
 }
 
 void WebPlayback::applyAudio(qreal volume, bool muted) {
-    if (bridge_)
-        shadcn_web_media_volume(static_cast<double>(volume), muted ? 1 : 0);
+    if (slot_ >= 0)
+        shadcn_web_media_volume(slot_, static_cast<double>(volume), muted ? 1 : 0);
 }
 
 void WebPlayback::poll() {
-    if (!bridge_)
+    if (slot_ < 0)
         return;
     // The browser only copies into a buffer it was told it may fill, so the buffer is
     // sized from the frame size the previous poll reported. Sizing it after a successful
@@ -276,7 +282,7 @@ void WebPlayback::poll() {
     if (previous > pixels_.size())
         pixels_.resize(previous);
     int info[PollCount]{};
-    const auto copied = shadcn_web_media_poll(reinterpret_cast<int>(pixels_.data()),
+    const auto copied = shadcn_web_media_poll(slot_, reinterpret_cast<int>(pixels_.data()),
                                               static_cast<int>(pixels_.size()), info);
     frameWidth_ = info[PollWidth];
     frameHeight_ = info[PollHeight];

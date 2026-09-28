@@ -92,7 +92,8 @@ private:
     bool playing_ = false;
     bool seekable_ = false;
     bool looping_ = false;
-    bool bridge_ = false;
+    // The element this playback owns in the browser registry, or -1 when none was made.
+    int slot_ = -1;
 };
 
 /// Mirrors the browser element's volume and mute state so the volume slider reports what
