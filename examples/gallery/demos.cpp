@@ -29,7 +29,8 @@ QStringList components() {
                       "accordion", "collapsible", "tabs", "scroll-area", "resizable",
                       "sidebar", "navigation-menu", "menubar", "dropdown-menu", "context-menu",
                       "carousel", "pagination", "direction", "toast", "sonner", "attachment",
-                      "bubble", "message", "message-scroller", "questionnaire", "marker", "button-ripple"};
+                      "bubble", "message", "message-scroller", "questionnaire", "marker", "button-ripple",
+                      "heatmap"};
     names.sort();
 #ifdef SHADCN_GALLERY_MEDIA
     // The player is an optional component, so it only joins the gallery when the media
@@ -655,6 +656,24 @@ QWidget* demo(const QString& name, QWidget* parent) {
         (void)chart->setSeries({{"Desktop", {186, 305, 237, 273, 209, 214}, Role::Chart1},
                                 {"Mobile", {80, 200, 120, 190, 130, 140}, Role::Chart3}});
         layout->addWidget(chart);
+    } else if (name == "heatmap") {
+        auto* heatmap = new Heatmap(host);
+        heatmap->setAccessiblePrefix(QStringLiteral("Watched minutes"));
+        // Twelve weeks ending on a Saturday, with a mix of quiet and busy days
+        // and a few empty ones, so every level and the empty state are visible.
+        QList<HeatmapDay> days;
+        const auto last = QDate(2026, 3, 14);
+        for (int week = 11; week >= 0; --week) {
+            for (int day = 0; day < 7; ++day) {
+                const auto date = last.addDays(-week * 7 - (6 - day));
+                if ((week * 7 + day) % 11 == 3) continue;
+                const auto level = (week * 3 + day * 5) % 5;
+                days.append({date, static_cast<double>(level) * 24.0});
+            }
+        }
+        (void)heatmap->setDays(days);
+        heatmap->setMaximum(96);
+        layout->addWidget(heatmap);
     }
     return canvas;
 }

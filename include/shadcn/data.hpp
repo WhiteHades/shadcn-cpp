@@ -3,6 +3,7 @@
 #include <QCalendarWidget>
 #include <QComboBox>
 #include <QDate>
+#include <QHash>
 #include <QListWidget>
 #include <QSortFilterProxyModel>
 #include <QTableView>
@@ -216,6 +217,102 @@ class DataTable : public Table {
 
   private:
     QSortFilterProxyModel* proxy_;
+};
+
+/// One day in a Heatmap, carrying the exact value behind its colour.
+struct HeatmapDay {
+    QDate date;
+    double value = 0;
+};
+
+/// A day grid coloured by a bucketed value, with a weekday axis and a level legend.
+///
+/// The grid is one focus stop. Arrow keys move a selected cell and wrap at the
+/// edges, so an eighty-four day grid does not become eighty-four tab stops. The
+/// selected cell is outlined, so the selection never depends on colour alone.
+class Heatmap : public QWidget {
+    Q_OBJECT
+    Q_PROPERTY(int levelCount READ levelCount WRITE setLevelCount)
+
+  public:
+    explicit Heatmap(QWidget* parent = nullptr);
+
+    /// Replaces the grid. Days need not be contiguous or ordered; the grid lays
+    /// them out by date with weeks as columns, matching a contribution graph.
+    /// A value that is not finite is rejected rather than drawn as zero.
+    std::expected<void, ValueError> setDays(QList<HeatmapDay> days);
+    [[nodiscard]] QList<HeatmapDay> days() const { return input_; }
+
+    /// The value that maps to the top level. Zero is rejected: every day would
+    /// then be the top level, which is a mistake in the caller's data.
+    void setMaximum(double maximum);
+    [[nodiscard]] double maximum() const noexcept { return maximum_; }
+    /// Bucket count above the empty cell. Clamped to one through four, because
+    /// the ramp is read from a fixed set of role mixes.
+    void setLevelCount(int count);
+    [[nodiscard]] int levelCount() const noexcept { return levelCount_; }
+
+    void setStartOfWeek(Qt::DayOfWeek day);
+    [[nodiscard]] Qt::DayOfWeek startOfWeek() const noexcept { return startOfWeek_; }
+    void setWeekdayLabelsVisible(bool visible);
+    [[nodiscard]] bool weekdayLabelsVisible() const noexcept { return weekdayLabels_; }
+    void setLegendVisible(bool visible);
+    [[nodiscard]] bool legendVisible() const noexcept { return legend_; }
+
+    [[nodiscard]] int weekCount() const noexcept { return weeks_; }
+    [[nodiscard]] int rowCount() const noexcept { return 7; }
+    /// The selected cell as a week column and a weekday row, or an invalid index.
+    [[nodiscard]] QPoint selectedCell() const { return selected_; }
+    void setSelectedCell(QPoint cell);
+    /// The accessible text for one cell, or an empty string when it is empty.
+    [[nodiscard]] QString cellText(QPoint cell) const;
+    /// The axis label drawn for a weekday row, empty when labels are hidden.
+    [[nodiscard]] QString weekdayLabel(int row) const;
+    void setAccessiblePrefix(const QString& prefix);
+
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
+  signals:
+    void cellActivated(const QDate& date, double value);
+    void selectionChanged(const QDate& date, double value);
+
+  protected:
+    void paintEvent(QPaintEvent*) override;
+    void mousePressEvent(QMouseEvent*) override;
+    void mouseMoveEvent(QMouseEvent*) override;
+    void leaveEvent(QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
+    bool event(QEvent* event) override;
+    void changeEvent(QEvent* event) override;
+
+  private:
+    struct Cell { QDate date; double value = 0; int level = 0; bool filled = false; };
+    void relayout();
+    void announceSelection();
+    [[nodiscard]] QRectF cellRect(int week, int day) const;
+    /// The cell under a point, or an invalid cell.
+    [[nodiscard]] QPoint cellAt(const QPointF& position) const;
+    /// The cell at a week column and weekday row, or null when it is out of range.
+    [[nodiscard]] const Cell* cellAt(QPoint cell) const;
+    [[nodiscard]] const Cell* cellForDate(const QDate& date) const;
+    [[nodiscard]] QColor levelColour(int level) const;
+    void moveSelection(int weeks, int days);
+    /// The days the caller supplied, sorted by date.
+    QList<HeatmapDay> input_;
+    /// One entry per week column and weekday row, so the grid is complete and
+    /// every lookup is a direct index rather than a search.
+    std::vector<Cell> cells_;
+    QHash<QDate, int> index_;
+    int levelCount_ = 4;
+    int weeks_ = 0;
+    double maximum_ = 1;
+    QPoint selected_{-1, -1};
+    QPoint hovered_{-1, -1};
+    Qt::DayOfWeek startOfWeek_ = Qt::Monday;
+    QString prefix_;
+    bool weekdayLabels_ = true;
+    bool legend_ = true;
 };
 
 enum class ChartType { Line, Area, Bar, Pie };

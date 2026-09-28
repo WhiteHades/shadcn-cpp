@@ -1011,4 +1011,377 @@ void Chart::leaveEvent(QEvent* event) {
     tooltip_->hide();
     QWidget::leaveEvent(event);
 }
+
+namespace {
+/// Blend two role colours toward each other. The heatmap ramp is built from the
+/// empty fill and the primary fill rather than from hard-coded greys, so a
+/// caller that customises the theme gets a ramp in their own colours.
+QColor mix(const QColor& from, const QColor& to, double t) {
+    const auto f = static_cast<float>(std::clamp(t, 0.0, 1.0));
+    return QColor::fromRgbF(float(from.redF() + (to.redF() - from.redF()) * f),
+                            float(from.greenF() + (to.greenF() - from.greenF()) * f),
+                            float(from.blueF() + (to.blueF() - from.blueF()) * f),
+                            float(from.alphaF() + (to.alphaF() - from.alphaF()) * f));
+}
+} // namespace
+
+Heatmap::Heatmap(QWidget* parent) : QWidget(parent) {
+    setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
+    setAccessibleName(tr("Activity heatmap"));
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    // The grid paints its own cells and its own selection ring, so the platform
+    // focus frame would describe the whole widget rather than the selected cell.
+    new detail::FocusRing(*this);
+}
+
+std::expected<void, ValueError> Heatmap::setDays(QList<HeatmapDay> days) {
+    for (const auto& day : days)
+        if (!std::isfinite(day.value)) return std::unexpected(ValueError::NonFinite);
+    input_ = std::move(days);
+    relayout();
+    return {};
+}
+
+void Heatmap::setMaximum(double maximum) {
+    if (!std::isfinite(maximum) || maximum <= 0) return;
+    maximum_ = maximum;
+    relayout();
+}
+
+void Heatmap::setLevelCount(int count) {
+    levelCount_ = std::clamp(count, 1, 4);
+    relayout();
+}
+
+void Heatmap::setStartOfWeek(Qt::DayOfWeek day) {
+    startOfWeek_ = day;
+    relayout();
+}
+
+void Heatmap::setWeekdayLabelsVisible(bool visible) {
+    weekdayLabels_ = visible;
+    updateGeometry();
+    update();
+}
+
+void Heatmap::setLegendVisible(bool visible) {
+    legend_ = visible;
+    updateGeometry();
+    update();
+}
+
+void Heatmap::setAccessiblePrefix(const QString& prefix) {
+    prefix_ = prefix;
+    if (selected_.x() >= 0) announceSelection();
+}
+
+void Heatmap::relayout() {
+    // Weeks are columns and weekdays are rows, the layout a contribution graph
+    // uses. A day before the first column's start-of-week and a day after the
+    // last one get an empty cell rather than a shifted column, so the first and
+    // last weeks are as wide as every other week.
+    cells_.clear();
+    index_.clear();
+    std::sort(input_.begin(), input_.end(),
+              [](const HeatmapDay& a, const HeatmapDay& b) { return a.date < b.date; });
+    if (input_.isEmpty()) {
+        weeks_ = 0;
+        selected_ = {-1, -1};
+        hovered_ = {-1, -1};
+        updateGeometry();
+        update();
+        return;
+    }
+    const auto first = input_.first().date;
+    const auto last = input_.last().date;
+    const auto firstWeekStart = first.addDays(-((first.dayOfWeek() - startOfWeek_ + 7) % 7));
+    const auto lastWeekStart = last.addDays(-((last.dayOfWeek() - startOfWeek_ + 7) % 7));
+    // Both starts are the same weekday, so the span is a whole number of weeks
+    // and the count is that span plus the week the first day falls in.
+    weeks_ = int(firstWeekStart.daysTo(lastWeekStart) / 7) + 1;
+
+    // One cell per weekday row per week column, so a caller reading rowCount and
+    // weekCount gets the full grid rather than a ragged set of days.
+    cells_ = std::vector<Cell>(static_cast<size_t>(weeks_ * 7));
+    for (int week = 0; week < weeks_; ++week) {
+        for (int day = 0; day < 7; ++day) {
+            auto& cell = cells_[static_cast<size_t>(week * 7 + day)];
+            cell.date = firstWeekStart.addDays(week * 7 + day);
+            cell.filled = false;
+            cell.value = 0;
+            cell.level = 0;
+        }
+    }
+    for (const auto& day : input_) {
+        const auto weekStart = day.date.addDays(-((day.date.dayOfWeek() - startOfWeek_ + 7) % 7));
+        // Measure forwards from the first column. Both dates are the same
+        // weekday, so the span is a whole number of weeks and truncation is
+        // exact.
+        const auto week = int(firstWeekStart.daysTo(weekStart) / 7);
+        const auto row = int((day.date.dayOfWeek() - startOfWeek_ + 7) % 7);
+        if (week < 0 || week >= weeks_ || row < 0 || row >= 7) continue;
+        auto& cell = cells_[static_cast<size_t>(week * 7 + row)];
+        cell.value = day.value;
+        cell.filled = true;
+        // Four buckets over the caller's maximum, with the lowest non-empty
+        // bucket starting above empty rather than at it. A day with any value is
+        // never drawn as an empty cell, because that would say "nothing happened"
+        // about a day that did.
+        const auto fraction = std::clamp(day.value / maximum_, 0.0, 1.0);
+        cell.level = fraction <= 0 ? 1
+                                   : std::min(levelCount_, 1 + int(fraction * levelCount_));
+        index_.insert(day.date, int(&cell - cells_.data()));
+    }
+    if (selected_.x() >= weeks_) selected_ = {-1, -1};
+    if (hovered_.x() >= weeks_) hovered_ = {-1, -1};
+    if (selected_.x() < 0) {
+        // Default the selection to the most recent day so the grid has a
+        // described state the moment it is shown.
+        for (int week = weeks_ - 1; week >= 0 && selected_.x() < 0; --week)
+            for (int day = 6; day >= 0; --day) {
+                const auto* entry = cellAt(QPoint(week, day));
+                if (!entry || !entry->filled) continue;
+                selected_ = {week, day};
+                break;
+            }
+    }
+    announceSelection();
+    updateGeometry();
+    update();
+}
+
+namespace {
+constexpr double kHeatmapCell = 12.0;
+constexpr double kHeatmapGap = 3.0;
+constexpr int kHeatmapLegend = 22;
+} // namespace
+
+QSize Heatmap::sizeHint() const {
+    return {int(weeks_ * (kHeatmapCell + kHeatmapGap)) + (weekdayLabels_ ? 28 : 0),
+            int(7 * (kHeatmapCell + kHeatmapGap)) + (legend_ ? kHeatmapLegend : 0) + 2};
+}
+
+QSize Heatmap::minimumSizeHint() const {
+    auto hint = sizeHint();
+    hint.setWidth(std::min(hint.width(), 160));
+    return hint;
+}
+
+QRectF Heatmap::cellRect(int week, int day) const {
+    const auto labelWidth = weekdayLabels_ ? 28.0 : 0.0;
+    const auto pitch = (height() - (legend_ ? kHeatmapLegend : 0)) / 7.0 - kHeatmapGap;
+    return {labelWidth + week * (kHeatmapCell + kHeatmapGap), day * (pitch + kHeatmapGap),
+            kHeatmapCell, pitch};
+}
+
+QPoint Heatmap::cellAt(const QPointF& position) const {
+    for (int week = 0; week < weeks_; ++week)
+        for (int day = 0; day < 7; ++day)
+            if (cellRect(week, day).adjusted(-1, -1, 1, 1).contains(position)) return {week, day};
+    return {-1, -1};
+}
+
+const Heatmap::Cell* Heatmap::cellAt(QPoint cell) const {
+    if (cell.x() < 0 || cell.x() >= weeks_ || cell.y() < 0 || cell.y() >= 7) return nullptr;
+    return &cells_[static_cast<size_t>(cell.x() * 7 + cell.y())];
+}
+
+const Heatmap::Cell* Heatmap::cellForDate(const QDate& date) const {
+    const auto found = index_.constFind(date);
+    if (found == index_.constEnd()) return nullptr;
+    return &cells_[static_cast<size_t>(*found)];
+}
+
+QColor Heatmap::levelColour(int level) const {
+    if (level <= 0) return colour(*this, Role::Muted);
+    const auto primary = colour(*this, Role::Primary);
+    // The ramp mixes the muted fill toward the primary fill. The steps are
+    // spaced so each level is visibly distinct from its neighbour at a glance.
+    // The steps are the smallest moves that clear 3:1 against the page in both
+    // colour modes, measured with the alpha composited rather than read from the
+    // token. Level 0 is the empty swatch and carries no requirement of its own.
+    static constexpr double steps[] = {0.0, 0.45, 0.60, 0.78, 1.0};
+    const auto step = steps[std::clamp(level, 0, 4)];
+    return mix(colour(*this, Role::Muted), primary, step);
+}
+
+QString Heatmap::cellText(QPoint cell) const {
+    const auto* entry = cellAt(cell);
+    if (!entry || !entry->filled) return {};
+    return prefix_.isEmpty()
+        ? tr("%1: %2").arg(entry->date.toString(Qt::ISODate), QString::number(entry->value))
+        : tr("%1, %2: %3").arg(prefix_, entry->date.toString(Qt::ISODate),
+                               QString::number(entry->value));
+}
+
+void Heatmap::setSelectedCell(QPoint cell) {
+    if (cell.x() < 0 || cell.x() >= weeks_ || cell.y() < 0 || cell.y() >= 7) return;
+    if (selected_ == cell) return;
+    selected_ = cell;
+    announceSelection();
+    update();
+    if (const auto* entry = cellAt(cell); entry && entry->filled)
+        emit selectionChanged(entry->date, entry->value);
+}
+
+QString Heatmap::weekdayLabel(int row) const {
+    // Only alternate rows are labelled, as a contribution graph does, so the
+    // axis does not repeat seven identical short words. An unlabelled row
+    // returns empty rather than a name the grid never shows.
+    if (!weekdayLabels_ || row < 0 || row > 6 || row % 2 != 0) return {};
+    // A row holds the weekday startOfWeek_ + row. The names are indexed
+    // Monday-first from zero while Qt numbers Monday as one, so the row is
+    // offset by the start of the week and brought back to a zero-based name.
+    // Using the row index directly would label a Monday row "Tue".
+    static const QStringList names{ tr("Mon"), tr("Tue"), tr("Wed"), tr("Thu"),
+                                    tr("Fri"), tr("Sat"), tr("Sun") };
+    return names.at(int((startOfWeek_ + row - 1) % 7));
+}
+
+void Heatmap::announceSelection() {
+    // The grid is one focus stop, so the selected cell's date and value are the
+    // widget's own description. Without this the widget would be announced as an
+    // unlabelled group and the values would be unreachable.
+    setAccessibleDescription(cellText(selected_));
+}
+
+void Heatmap::moveSelection(int weeks, int days) {
+    if (weeks_ == 0) return;
+    if (selected_.x() < 0) {
+        setSelectedCell({weeks_ - 1, 6});
+        return;
+    }
+    // Wrapping at the edges keeps every cell reachable without a scroll.
+    auto column = selected_.x() + weeks;
+    auto row = selected_.y() + days;
+    column = ((column % weeks_) + weeks_) % weeks_;
+    row = ((row % 7) + 7) % 7;
+    setSelectedCell({column, row});
+}
+
+void Heatmap::paintEvent(QPaintEvent*) {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    auto font = this->font();
+    font.setPixelSize(11);
+    painter.setFont(font);
+    if (weeks_ == 0) {
+        painter.setPen(colour(*this, Role::MutedForeground));
+        painter.drawText(rect(), Qt::AlignCenter, tr("No activity"));
+        return;
+    }
+    if (weekdayLabels_) {
+        painter.setPen(colour(*this, Role::MutedForeground));
+        for (int day = 0; day < 7; ++day) {
+            const auto label = weekdayLabel(day);
+            if (label.isEmpty()) continue;
+            const auto bounds = cellRect(0, day);
+            painter.drawText(QRectF(0, bounds.top(), 24, bounds.height()),
+                             Qt::AlignRight | Qt::AlignVCenter, label);
+        }
+    }
+    const auto radius = std::min({3.0, theme(*this).radius(), kHeatmapCell / 2.0});
+    for (int week = 0; week < weeks_; ++week) {
+        for (int day = 0; day < 7; ++day) {
+            const auto* entry = cellAt(QPoint(week, day));
+            const auto bounds = cellRect(week, day);
+            if (!entry->filled) continue;
+            painter.setBrush(levelColour(entry->level));
+            painter.setPen(Qt::NoPen);
+            painter.drawRoundedRect(bounds, radius, radius);
+        }
+    }
+    // The hovered cell gets a subtle outline and the selected cell a stronger
+    // one, so neither state is signalled by colour alone.
+    if (hovered_ != selected_ && hovered_.x() >= 0) {
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(colour(*this, Role::MutedForeground), 1));
+        painter.drawRoundedRect(cellRect(hovered_.x(), hovered_.y()), radius, radius);
+    }
+    if (selected_.x() >= 0) {
+        const auto bounds = cellRect(selected_.x(), selected_.y());
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(colour(*this, Role::Ring), 2));
+        painter.drawRoundedRect(bounds.adjusted(-1, -1, 1, 1), radius + 1, radius + 1);
+    }
+    if (legend_) {
+        painter.setPen(colour(*this, Role::MutedForeground));
+        const auto top = cellRect(0, 6).bottom() + kHeatmapGap;
+        painter.drawText(QRectF(0, top, 40, 18), Qt::AlignLeft | Qt::AlignVCenter, tr("Less"));
+        auto left = 40.0;
+        for (int level = 0; level <= levelCount_; ++level) {
+            painter.setBrush(levelColour(level));
+            painter.setPen(Qt::NoPen);
+            painter.drawRoundedRect(QRectF(left, top + 3, kHeatmapCell, kHeatmapCell),
+                                    radius, radius);
+            left += kHeatmapCell + kHeatmapGap;
+        }
+        painter.setPen(colour(*this, Role::MutedForeground));
+        painter.drawText(QRectF(left, top, 60, 18), Qt::AlignLeft | Qt::AlignVCenter, tr("More"));
+    }
+}
+
+void Heatmap::mousePressEvent(QMouseEvent* event) {
+    const auto cell = cellAt(event->position());
+    if (cell.x() < 0) { QWidget::mousePressEvent(event); return; }
+    setSelectedCell(cell);
+    if (const auto* entry = cellAt(cell); entry && entry->filled) emit cellActivated(entry->date, entry->value);
+    event->accept();
+}
+
+void Heatmap::mouseMoveEvent(QMouseEvent* event) {
+    const auto cell = cellAt(event->position());
+    if (cell == hovered_) return;
+    hovered_ = cell;
+    if (const auto* entry = cellAt(cell); entry && entry->filled) {
+        setToolTip(cellText(cell));
+        setAccessibleDescription(cellText(cell));
+    } else {
+        setToolTip({});
+        announceSelection();
+    }
+    update();
+    QWidget::mouseMoveEvent(event);
+}
+
+void Heatmap::leaveEvent(QEvent* event) {
+    hovered_ = {-1, -1};
+    setToolTip({});
+    announceSelection();
+    update();
+    QWidget::leaveEvent(event);
+}
+
+void Heatmap::keyPressEvent(QKeyEvent* event) {
+    switch (event->key()) {
+    case Qt::Key_Left: moveSelection(-1, 0); break;
+    case Qt::Key_Right: moveSelection(1, 0); break;
+    case Qt::Key_Up: moveSelection(0, -1); break;
+    case Qt::Key_Down: moveSelection(0, 1); break;
+    case Qt::Key_Home: setSelectedCell({0, selected_.y() < 0 ? 0 : selected_.y()}); break;
+    case Qt::Key_End: setSelectedCell({weeks_ - 1, selected_.y() < 0 ? 6 : selected_.y()}); break;
+    case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Space:
+        if (const auto* entry = cellAt(selected_); entry && entry->filled)
+            emit cellActivated(entry->date, entry->value);
+        else return;
+        break;
+    default: QWidget::keyPressEvent(event); return;
+    }
+    event->accept();
+}
+
+bool Heatmap::event(QEvent* event) {
+    if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
+        // Level colours come from the theme, so a theme change has to repaint.
+        announceSelection();
+        update();
+    }
+    return QWidget::event(event);
+}
+
+void Heatmap::changeEvent(QEvent* event) {
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::FontChange) { updateGeometry(); update(); }
+}
 } // namespace shadcn
