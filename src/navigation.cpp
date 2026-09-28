@@ -844,6 +844,17 @@ void Sidebar::updateWidth(bool animate) {
                                   ? (open_ ? expandedWidth_ : iconWidth_)
                                   : (open_ ? expandedWidth_ : 0);
     animation_->stop();
+    // A rail that is collapsing to nothing is hidden, not merely narrow. A visible
+    // widget of zero width still holds focus stops and still appears to assistive
+    // technology, so a reader tabbing through the window would land on controls that
+    // are not on screen and cannot be seen.
+    //
+    // The hide is immediate rather than deferred to the end of the slide. The rail
+    // may still animate shut, but it leaves the focus order and the accessibility
+    // tree at once: a reader who closes the rail should not be able to tab into it
+    // while it is on its way out.
+    if (target == 0) hide();
+    else if (!isVisible()) show();
     if (!animate || motionDuration(*this, 200) == 0) {
         setMinimumWidth(target);
         setMaximumWidth(target);
