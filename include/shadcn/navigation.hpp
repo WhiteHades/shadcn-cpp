@@ -139,6 +139,14 @@ public:
     [[nodiscard]] QString currentValue() const;
     void setCurrentValue(const QString& value);
     [[nodiscard]] QStringList values() const;
+    /// Whether the bar of tabs is shown.
+    ///
+    /// An application whose navigation lives in a rail still needs a value based
+    /// page switcher, and without a way to hide the bar the reader gets two sets of
+    /// tabs saying the same thing in two places. Hiding it takes no room, so the
+    /// pages grow into the space rather than collapsing.
+    void setListVisible(bool visible);
+    [[nodiscard]] bool listVisible() const noexcept { return listVisible_; }
     [[nodiscard]] QHBoxLayout& list();
 signals:
     void currentChanged(const QString& value);
@@ -156,6 +164,7 @@ private:
     void restyle();
     Qt::Orientation orientation_;
     TabsListVariant variant_ = TabsListVariant::Default;
+    bool listVisible_ = true;
     QWidget* listHost_;
     QHBoxLayout* list_;
     QStackedWidget* stack_;

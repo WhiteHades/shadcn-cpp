@@ -553,6 +553,15 @@ QStringList Tabs::values() const {
 
 QHBoxLayout& Tabs::list() { return *list_; }
 
+void Tabs::setListVisible(bool visible) {
+    if (listVisible_ == visible) return;
+    listVisible_ = visible;
+    // The host is hidden rather than the buttons, so the bar leaves the focus order
+    // and the accessibility tree along with the space it occupied.
+    if (auto* host = list_->parentWidget()) host->setVisible(visible);
+    updateGeometry();
+}
+
 void Tabs::select(int index, bool focus) {
     if (index < 0 || index >= static_cast<int>(entries_.size())) return;
     const auto previousValue = currentValue();
@@ -751,6 +760,13 @@ Sidebar::Sidebar(QWidget* parent)
     header_->setContentsMargins(0, 0, 0, 0);
     content_->setContentsMargins(0, 0, 0, 0);
     footer_->setContentsMargins(0, 0, 0, 0);
+    // A rail's items stack from the top and the spare height is left below them.
+    // Without this the layout shares the height between the items themselves, and
+    // two of them in a tall window end up metres apart with nothing between them,
+    // which is not a list. A stretch is not the answer here: one added first lands
+    // above the items, and one added per item piles up between them.
+    content_->setAlignment(Qt::AlignTop);
+    footer_->setAlignment(Qt::AlignTop);
     outer->addWidget(headerHost_);
     outer->addWidget(contentHost_, 1);
     outer->addWidget(footerHost_);
@@ -842,7 +858,13 @@ QPushButton& sidebarMenuButton(const QWidget* rail, QVBoxLayout* into, const QSt
     // and the accessible name still has to say what the item is.
     button->setProperty("shadcnSidebarText", text);
     const auto height = size == SidebarMenuSize::Sm ? 28 : size == SidebarMenuSize::Lg ? 48 : 32;
-    button->setMinimumHeight(height);
+    // Fixed in both height and policy, and not merely a minimum height. A button with
+    // only a minimum grows to fill whatever the rail has, and a layout that shares
+    // spare space between expanding items then puts the fixed-height widget in the
+    // middle of a much taller slot. Two items in a tall window end up metres apart
+    // with nothing between them, and a rail of navigation stops looking like a list.
+    button->setFixedHeight(height);
+    button->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     button->setStyleSheet(sidebarMenuButtonSheet(rail, variant));
     into->addWidget(button);
     return *button;
