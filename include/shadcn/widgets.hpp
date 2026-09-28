@@ -4,13 +4,18 @@
 #include <shadcn/core.hpp>
 #include <QCheckBox>
 #include <QFrame>
+#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QLayout>
+#include <QVBoxLayout>
 #include <QLineEdit>
 #include <QPointer>
 #include <QProgressBar>
 #include <QProxyStyle>
 #include <QPushButton>
 #include <QPointF>
+#include <array>
 #include <concepts>
 #include <utility>
 #include <vector>
@@ -242,13 +247,23 @@ private:
 };
 
 /// Card composition with owned header, content, footer and action layouts.
+///
+/// The stock card is one box. The root owns the vertical padding and the gaps, and the
+/// header, content and footer are slots that only add horizontal padding. They are layouts
+/// on the card itself rather than nested widgets, so there is nothing between the card and a
+/// control that could clip it when the control shifts under the pointer.
 class Card : public QFrame {
     Q_OBJECT
 public:
     explicit Card(QWidget* parent = nullptr);
     void setTitle(const QString& title);
     void setDescription(const QString& description);
-    /// Returned layouts are borrowed and remain owned by the card.
+    /// Draws a rule above the footer row and gives it the padding that rule implies. The
+    /// stock footer only does this when the caller adds a border to it, so it is off by
+    /// default and the card carries one fill from top to bottom.
+    void setFooterBorder(bool enabled);
+    /// Returned layouts are borrowed and remain owned by the card. Each joins the card's
+    /// layout the first time it is requested and leaves no gap while it is empty.
     [[nodiscard]] QVBoxLayout& content();
     [[nodiscard]] QHBoxLayout& footer();
     [[nodiscard]] QVBoxLayout& action();
@@ -256,17 +271,23 @@ protected:
     void paintEvent(QPaintEvent*) override;
     void changeEvent(QEvent*) override;
 private:
+    /// Slot order, which is the order they appear in the card.
+    enum Slot { Header, Content, Footer, SlotCount };
+    void attach(Slot slot);
+    [[nodiscard]] QLayout* layoutFor(Slot slot) const;
+    [[nodiscard]] bool attached(Slot slot) const;
     void updateHeader();
     void updatePalette();
-    QWidget* header_;
+    QVBoxLayout* outer_;
+    QGridLayout* header_;
     QLabel* title_;
     QLabel* description_;
-    QWidget* contentHost_;
-    QWidget* footerHost_;
-    QWidget* actionHost_;
     QVBoxLayout* content_;
     QHBoxLayout* footer_;
     QVBoxLayout* action_;
+    bool footerBorder_ = false;
+    bool actionAttached_ = false;
+    std::array<bool, static_cast<std::size_t>(SlotCount)> attached_{};
 };
 
 } // namespace shadcn

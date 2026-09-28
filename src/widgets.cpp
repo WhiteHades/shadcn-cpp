@@ -677,49 +677,105 @@ void Skeleton::paintEvent(QPaintEvent*) {
 }
 
 Card::Card(QWidget* parent) : QFrame(parent) {
-    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
-    auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 16, 0, 16); outer->setSpacing(16);
-    header_ = new QWidget(this);
-    auto* headerLayout = new QGridLayout(header_);
-    headerLayout->setContentsMargins(16, 0, 16, 0); headerLayout->setSpacing(4);
-    headerLayout->setColumnStretch(0, 1);
-    title_ = new QLabel(header_); title_->setTextFormat(Qt::PlainText); title_->setWordWrap(true);
-    auto titleFont = font(); titleFont.setWeight(QFont::Medium); titleFont.setPixelSize(16); title_->setFont(titleFont);
-    description_ = new QLabel(header_); description_->setTextFormat(Qt::PlainText); description_->setWordWrap(true);
-    actionHost_ = new QWidget(header_); action_ = new QVBoxLayout(actionHost_); action_->setContentsMargins(0,0,0,0);
-    headerLayout->addWidget(title_, 0, 0); headerLayout->addWidget(description_, 1, 0);
-    headerLayout->addWidget(actionHost_, 0, 1, 2, 1, Qt::AlignTop);
-    actionHost_->hide();
-    outer->addWidget(header_); header_->hide();
-    contentHost_ = new QWidget(this); content_ = new QVBoxLayout(contentHost_);
-    content_->setContentsMargins(16,0,16,0); content_->setSpacing(12);
-    outer->addWidget(contentHost_); contentHost_->hide();
-    footerHost_ = new QWidget(this); footer_ = new QHBoxLayout(footerHost_);
-    // Sections contribute horizontal padding only. The outer layout owns the vertical
-    // padding and the gaps, as it does for the header and content. A footer that also
-    // padded itself vertically would add to the outer margin and leave a band of dead
-    // space below the footer row, which reads as a chin.
-    footer_->setContentsMargins(16,0,16,0); footer_->setSpacing(8);
-    outer->addWidget(footerHost_); footerHost_->hide();
+    // One box. The outer layout owns the vertical padding and the gaps, exactly as the
+    // stock root does with py-6 and gap-6, and every slot only adds horizontal padding.
+    outer_ = new QVBoxLayout(this);
+    outer_->setContentsMargins(0, 16, 0, 16);
+    outer_->setSpacing(16);
+
+    header_ = new QGridLayout;
+    header_->setContentsMargins(16, 0, 16, 0);
+    header_->setSpacing(8);
+    header_->setColumnStretch(0, 1);
+
+    title_ = new QLabel(this); title_->setTextFormat(Qt::PlainText); title_->setWordWrap(true);
+    auto titleFont = font(); titleFont.setWeight(QFont::Medium); titleFont.setPixelSize(16);
+    title_->setFont(titleFont);
+    description_ = new QLabel(this); description_->setTextFormat(Qt::PlainText);
+    description_->setWordWrap(true);
+    header_->addWidget(title_, 0, 0);
+    header_->addWidget(description_, 1, 0);
+
+    content_ = new QVBoxLayout;
+    content_->setContentsMargins(16, 0, 16, 0);
+    content_->setSpacing(12);
+
+    footer_ = new QHBoxLayout;
+    // No vertical padding of its own. A footer that padded itself would add to the outer
+    // margin and leave a band of dead space below the row.
+    footer_->setContentsMargins(16, 0, 16, 0);
+    footer_->setSpacing(8);
+
+    action_ = new QVBoxLayout;
+    action_->setContentsMargins(0, 0, 0, 0);
+    action_->setSpacing(8);
+
     updatePalette();
+}
+QLayout* Card::layoutFor(Slot slot) const {
+    switch (slot) {
+    case Header: return header_;
+    case Content: return content_;
+    case Footer: return footer_;
+    case SlotCount: break;
+    }
+    return nullptr;
+}
+bool Card::attached(Slot slot) const { return attached_[static_cast<std::size_t>(slot)]; }
+void Card::attach(Slot slot) {
+    auto* layout = layoutFor(slot);
+    if (!layout || attached(slot))
+        return;
+    // Insert after every earlier slot that is already present, so requesting the footer
+    // before the content still yields header, content, footer.
+    int index = 0;
+    for (int earlier = 0; earlier < static_cast<int>(slot); ++earlier)
+        if (attached(static_cast<Slot>(earlier))) ++index;
+    outer_->insertLayout(index, layout);
+    attached_[static_cast<std::size_t>(slot)] = true;
 }
 void Card::updatePalette() {
     const auto& theme = themeFor(*this);
-    auto p = palette(); p.setColor(QPalette::WindowText, color(theme, Role::CardForeground)); setPalette(p);
-    auto muted = description_->palette(); muted.setColor(QPalette::WindowText, color(theme, Role::MutedForeground));
+    auto p = palette(); p.setColor(QPalette::WindowText, color(theme, Role::CardForeground));
+    setPalette(p);
+    auto muted = description_->palette();
+    muted.setColor(QPalette::WindowText, color(theme, Role::MutedForeground));
     description_->setPalette(muted);
 }
 void Card::updateHeader() {
     title_->setVisible(!title_->text().isEmpty());
     description_->setVisible(!description_->text().isEmpty());
-    header_->setVisible(!title_->text().isEmpty() || !description_->text().isEmpty() || !actionHost_->isHidden());
+    if (!title_->text().isEmpty() || !description_->text().isEmpty() || actionAttached_)
+        attach(Header);
+    else if (attached(Header)) {
+        outer_->removeItem(header_);
+        attached_[static_cast<std::size_t>(Header)] = false;
+    }
 }
 void Card::setTitle(const QString& title) { title_->setText(title); updateHeader(); }
-void Card::setDescription(const QString& description) { description_->setText(description); updateHeader(); }
-QVBoxLayout& Card::content() { contentHost_->show(); return *content_; }
-QHBoxLayout& Card::footer() { footerHost_->show(); return *footer_; }
-QVBoxLayout& Card::action() { actionHost_->show(); header_->show(); return *action_; }
+void Card::setDescription(const QString& description) {
+    description_->setText(description); updateHeader();
+}
+QVBoxLayout& Card::content() { attach(Content); return *content_; }
+QHBoxLayout& Card::footer() { attach(Footer); return *footer_; }
+QVBoxLayout& Card::action() {
+    attach(Header);
+    if (!actionAttached_) {
+        // The stock action sits in the header's second column, spanning both rows, aligned
+        // to the top and the end.
+        header_->addLayout(action_, 0, 1, 2, 1, Qt::AlignTop | Qt::AlignRight);
+        actionAttached_ = true;
+    }
+    return *action_;
+}
+void Card::setFooterBorder(bool enabled) {
+    if (footerBorder_ == enabled)
+        return;
+    footerBorder_ = enabled;
+    // The opt-in rule carries its own top padding, which the outer layout's gap does not.
+    footer_->setContentsMargins(16, enabled ? 16 : 0, 16, 0);
+    update();
+}
 void Card::changeEvent(QEvent* event) {
     QFrame::changeEvent(event);
     if (event->type() == QEvent::StyleChange) updatePalette();
@@ -727,15 +783,20 @@ void Card::changeEvent(QEvent* event) {
 void Card::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     const auto& theme = themeFor(*this);
+    // The card surface is the only fill. The stock card has no tinted footer, and a tint
+    // under the footer row is what read as a band of a different tone.
     rounded(painter, QRectF(rect()).adjusted(.5,.5,-.5,-.5), theme.radius() * 1.4,
             color(theme, Role::Card), color(theme, Role::Border));
-    if (!footerHost_->isHidden()) {
+    // The stock footer is horizontal padding only, with the rule opt-in, so nothing is
+    // drawn here unless the caller asked for the rule.
+    if (footerBorder_ && attached(Footer)) {
+        const auto top = footer_->geometry().top();
         QPainterPath clip;
-        clip.addRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5), theme.radius()*1.4, theme.radius()*1.4);
+        clip.addRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5), theme.radius() * 1.4,
+                            theme.radius() * 1.4);
         painter.setClipPath(clip);
-        painter.fillRect(footerHost_->geometry(), alpha(color(theme, Role::Muted), .5));
-        painter.setPen(color(theme,Role::Border));
-        painter.drawLine(0,footerHost_->y(),width(),footerHost_->y());
+        painter.setPen(color(theme, Role::Border));
+        painter.drawLine(0, top, width(), top);
     }
 }
 } // namespace shadcn
