@@ -943,9 +943,17 @@ void Sidebar::restyleItems() {
     // colours of the mode it was built in: the open item stays a near-white block
     // on a near-black page. A rail of navigation that does not follow the theme is
     // the light component in the middle of a dark interface.
+    // What was last applied is remembered by value, not by address. Replacing the
+    // style frees the old one and installs a new one, and a fresh allocation can land
+    // on the address the old one had, so comparing pointers can decide nothing changed
+    // when everything did. The accent is the colour the items are actually painted
+    // with, so a change in it is the change that matters, and the mode catches the
+    // case where a high contrast remap alters it without the style object moving.
     const auto& current = themeFor(*this);
-    if (itemsUseTheme_ == &current) return;
-    itemsUseTheme_ = &current;
+    const auto accent = current.color(Role::SidebarAccent);
+    if (itemsUseAccent_ == accent && itemsUseMode_ == current.mode()) return;
+    itemsUseAccent_ = accent;
+    itemsUseMode_ = current.mode();
     for (auto* button : findChildren<QPushButton*>())
         if (button->property("shadcnSidebarVariant").isValid())
             button->setStyleSheet(sidebarMenuButtonSheet(
