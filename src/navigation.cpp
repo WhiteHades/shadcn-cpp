@@ -693,7 +693,11 @@ ResizablePanelGroup::ResizablePanelGroup(Qt::Orientation orientation, QWidget* p
     // painted centred inside a wider handle, so the design reads the same.
     setHandleWidth(24);
     setFocusPolicy(Qt::StrongFocus);
-    setStyleSheet(QStringLiteral("QSplitter::handle { background:%1; }").arg(rgb(colour(*this, Role::Border))));
+    // No style sheet here, for the same reason the input field has none: a style
+    // sheet gives this widget a style object of its own, so it would keep painting
+    // the border colour it resolved at construction on a theme that has since moved.
+    // The handle is a ResizableHandle that paints its own divider from theme roles,
+    // so the sheet was covering painting that already followed the theme.
 }
 
 void ResizablePanelGroup::setOrientation(Qt::Orientation orientation) {
