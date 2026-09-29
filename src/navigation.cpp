@@ -926,12 +926,24 @@ void Sidebar::paintEvent(QPaintEvent*) {
 bool Sidebar::event(QEvent* event) {
     const auto result = QFrame::event(event);
     if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
-        // Rebuilt here, and not during the paint below. Setting a child's sheet from
-        // inside the parent's paint event leaves that child repainting a frame later,
-        // so a caller that renders once sees the item still wearing the old mode. A
-        // style change is the right moment: the items are repainted afterwards
-        // anyway, and the rebuild is guarded by the value comparison below, so a
-        // change that turns out to be no change costs nothing.
+        // The rebuild is deferred to the next turn of the event loop. Two things
+        // make it necessary and two make it sufficient.
+        //
+        // Necessary: setting a child's style sheet from inside a paint event, or
+        // from inside the style change that is still propagating, leaves that child
+        // repainting a frame later. A caller that renders once, as a screenshot
+        // harness and a compositor both do, sees the item still wearing the old
+        // mode's colours.
+        //
+        // Sufficient: the guard inside the rebuild compares the accent by value, so
+        // a style change that turns out to carry the same colours does nothing, and
+        // one that does carry different ones is never skipped for landing on an
+        // address the previous theme had.
+        QTimer::singleShot(0, this, [this] {
+            restyleItems();
+            update();
+        });
+        update();
         restyleItems();
         update();
     }
