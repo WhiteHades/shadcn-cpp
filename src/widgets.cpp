@@ -365,7 +365,14 @@ void Button::paintEvent(QPaintEvent*) {
 
 Input::Input(QWidget* parent) : QLineEdit(parent) {
     setFrame(false);
-    setStyleSheet("QLineEdit { background: transparent; border: none; }");
+    // No style sheet, deliberately. A style sheet gives the widget a style object of
+    // its own, and a widget with a style object of its own resolves every colour
+    // through that object rather than through the application style. So the moment
+    // the application theme was installed or changed, this field would have gone on
+    // painting the colours it was built with, on a page that had moved underneath it.
+    // That is not hypothetical: it is what left a light field on a dark page.
+    // The frame is off and the painting is done in paintEvent from theme roles, so
+    // nothing is lost by having no sheet here.
     setTextMargins(10, 4, 10, 4);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     updatePalette();
