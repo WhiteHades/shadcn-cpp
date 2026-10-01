@@ -14,6 +14,7 @@
 
 #include <QImage>
 #include <QObject>
+#include <QPointer>
 #include <QUrl>
 #include <cstdint>
 #include <vector>
@@ -80,6 +81,7 @@ private:
     void poll();
 
     QUrl source_;
+    std::uint64_t sourceRevision_ = 0;
     QTimer* pump_;
     std::vector<uint8_t> pixels_;
     int frameWidth_ = 0;
@@ -112,7 +114,7 @@ signals:
     void mutedChanged(bool muted);
 
 private:
-    WebPlayback* playback_;
+    QPointer<WebPlayback> playback_;
     qreal volume_ = .75;
     bool muted_ = false;
 };

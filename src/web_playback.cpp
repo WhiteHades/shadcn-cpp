@@ -2,6 +2,8 @@
 #include "playback.hpp"
 
 #include <QTimer>
+#include <QPointer>
+#include <limits>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -18,8 +20,7 @@ enum PollIndex {
     PollError,
     PollPaused,
     PollEnded,
-    PollDurationMs,
-    PollTimeMs,
+    PollSeekable,
     PollCount,
 };
 // Fast while frames arrive, slow while the element is idle. A media element only decodes
@@ -53,25 +54,35 @@ EM_JS(int, shadcn_web_media_bridge, (), {
     // place getImageData can copy from cheaply.
     context: canvas.getContext('2d', {willReadFrequently: true, alpha: false}),
     dirty: true,
+    disposed: false,
+    callback: 0,
   };
   // requestVideoFrameCallback marks which frames are new so an unchanged frame is not
   // copied again. A browser without it falls back to copying on every poll.
   if (video.requestVideoFrameCallback) {
     var watch = function() {
+      if (state.disposed) return;
       state.dirty = true;
-      video.requestVideoFrameCallback(watch);
+      state.callback = video.requestVideoFrameCallback(watch);
     };
-    video.requestVideoFrameCallback(watch);
+    state.callback = video.requestVideoFrameCallback(watch);
   }
-  registry.push(state);
-  return registry.length - 1;
+  if (!registry.freeSlots) registry.freeSlots = [];
+  var slot = registry.freeSlots.length ? registry.freeSlots.pop() : registry.length;
+  registry[slot] = state;
+  return slot;
 });
 
 EM_JS(void, shadcn_web_media_dispose, (int slot), {
   var registry = globalThis.shadcnWebMedia;
   var state = registry && registry[slot];
   if (!state) return;
+  state.disposed = true;
+  if (state.callback && state.video.cancelVideoFrameCallback)
+    state.video.cancelVideoFrameCallback(state.callback);
   registry[slot] = null;
+  registry.freeSlots.push(slot);
+  state.canvas.width = state.canvas.height = 0;
   state.video.pause();
   state.video.removeAttribute('src');
   state.video.load();
@@ -84,6 +95,7 @@ EM_JS(void, shadcn_web_media_load, (int slot, const char* url), {
   state.dirty = true;
   var href = url ? UTF8ToString(url) : String();
   if (!href) {
+    state.canvas.width = state.canvas.height = 0;
     state.video.removeAttribute('src');
     state.video.load();
     return;
@@ -141,7 +153,7 @@ EM_JS(void, shadcn_web_media_volume, (int slot, double volume, int muted), {
 // Emscripten places an EM_JS body inside the module factory, where HEAP32 and HEAPU8 are
 // the live views. They are addressed directly rather than through Module, because Module
 // only carries them when the build exports them.
-EM_JS(int, shadcn_web_media_poll, (int slot, int pixels, int capacity, int* info), {
+EM_JS(int, shadcn_web_media_poll, (int slot, int pixels, int capacity, int* info, double* timing), {
   var state = globalThis.shadcnWebMedia && globalThis.shadcnWebMedia[slot];
   if (!state) return 0;
   var video = state.video;
@@ -153,8 +165,10 @@ EM_JS(int, shadcn_web_media_poll, (int slot, int pixels, int capacity, int* info
   HEAP32[at + 4] = video.paused ? 1 : 0;
   HEAP32[at + 5] = video.ended ? 1 : 0;
   var duration = video.duration;
-  HEAP32[at + 6] = isFinite(duration) ? Math.round(duration * 1000) : -1;
-  HEAP32[at + 7] = Math.round(video.currentTime * 1000);
+  HEAP32[at + 6] = video.seekable.length > 0 ? 1 : 0;
+  var times = timing >> 3;
+  HEAPF64[times] = isFinite(duration) ? duration * 1000 : 0;
+  HEAPF64[times + 1] = video.currentTime * 1000;
   if (video.requestVideoFrameCallback && !state.dirty) return 0;
   var width = video.videoWidth;
   var height = video.videoHeight;
@@ -164,9 +178,15 @@ EM_JS(int, shadcn_web_media_poll, (int slot, int pixels, int capacity, int* info
     state.canvas.width = width;
     state.canvas.height = height;
   }
-  state.context.drawImage(video, 0, 0, width, height);
-  // getImageData returns RGBA bytes, which is what Format_RGBA8888 expects.
-  HEAPU8.set(state.context.getImageData(0, 0, width, height).data, pixels);
+  try {
+    if (!state.context) return 0;
+    state.context.drawImage(video, 0, 0, width, height);
+    // A cross-origin source can decode but forbid canvas access. Report the error.
+    HEAPU8.set(state.context.getImageData(0, 0, width, height).data, pixels);
+  } catch (error) {
+    HEAP32[at + 3] = 3;
+    return 0;
+  }
   state.dirty = false;
   return 1;
 });
@@ -202,8 +222,14 @@ void WebPlayback::setSource(const QUrl& source) {
         shadcn_web_media_load(slot_, url.constData());
     }
     source_ = source;
-    position_ = 0;
-    errorCode_ = source.isEmpty() || browserCanFetch(source) ? NoError : UnsupportedSourceError;
+    frameWidth_ = frameHeight_ = 0;
+    if (source.isEmpty()) std::vector<uint8_t>{}.swap(pixels_);
+    else pixels_.clear();
+    ++sourceRevision_;
+    const QPointer<WebPlayback> alive(this);
+    const auto revision = sourceRevision_;
+    emit frameAvailable(QImage{});
+    if (!alive || sourceRevision_ != revision) return;
     // Nothing is left to poll once the element is empty, so the timer stops rather than
     // waking every quarter second for the rest of the widget's life.
     if (source_.isEmpty())
@@ -227,8 +253,10 @@ void WebPlayback::pause() {
 }
 
 void WebPlayback::stop() {
+    const QPointer<WebPlayback> alive(this);
+    const auto revision = sourceRevision_;
     pause();
-    setPosition(0);
+    if (alive && sourceRevision_ == revision) setPosition(0);
 }
 
 void WebPlayback::setPosition(qint64 milliseconds) {
@@ -239,6 +267,7 @@ void WebPlayback::setPosition(qint64 milliseconds) {
 }
 
 void WebPlayback::setPlaybackRate(qreal rate) {
+    if (!std::isfinite(rate) || rate <= 0) return;
     playbackRate_ = rate;
     if (slot_ >= 0)
         shadcn_web_media_rate(slot_, static_cast<double>(rate));
@@ -275,49 +304,37 @@ void WebPlayback::applyAudio(qreal volume, bool muted) {
 void WebPlayback::poll() {
     if (slot_ < 0)
         return;
-    // The browser only copies into a buffer it was told it may fill, so the buffer is
-    // sized from the frame size the previous poll reported. Sizing it after a successful
-    // copy would never grow it past the first empty one.
-    const auto previous = std::size_t(frameWidth_) * std::size_t(frameHeight_) * 4;
-    if (previous > pixels_.size())
-        pixels_.resize(previous);
+    const QPointer<WebPlayback> alive(this);
+    const auto revision = sourceRevision_;
+    const auto unchanged = [&] { return alive && sourceRevision_ == revision; };
+    // A frame must fit both the Emscripten buffer size and QImage's row stride.
+    const auto previous = std::uint64_t(std::max(0, frameWidth_)) *
+                          std::uint64_t(std::max(0, frameHeight_)) * 4;
+    const bool frameFits = previous <= std::size_t(std::numeric_limits<int>::max());
+    if (frameFits && previous > pixels_.size()) pixels_.resize(static_cast<std::size_t>(previous));
     int info[PollCount]{};
+    double timing[2]{};
     const auto copied = shadcn_web_media_poll(slot_, reinterpret_cast<int>(pixels_.data()),
-                                              static_cast<int>(pixels_.size()), info);
+                                            static_cast<int>(pixels_.size()), info, timing);
     frameWidth_ = info[PollWidth];
     frameHeight_ = info[PollHeight];
-    if (copied != 0) {
-        const QImage frame(pixels_.data(), frameWidth_, frameHeight_, frameWidth_ * 4,
-                           QImage::Format_RGBA8888);
-        emit frameAvailable(frame);
-    }
-    // The element reports itself; C++ owns every value the transport reads.
-    const auto readyState = info[PollReadyState];
-    const auto reportedError = info[PollError];
-    const auto ended = info[PollEnded] != 0;
-    // An element with no source reports a negative or non-finite duration, and the
-    // transport reads zero there, as QMediaPlayer does.
-    const auto duration = std::max(qint64{0}, qint64(info[PollDurationMs]));
-    const auto position = std::clamp(qint64(info[PollTimeMs]), qint64{0}, duration);
-    const auto playing = info[PollPaused] == 0 && !ended && errorCode_ == NoError;
-    const auto seekable = readyState >= 1 && duration > 0;
-    auto nextStatus = status_;
-    auto nextError = errorCode_;
-    if (nextError == NoError && reportedError != 0)
-        nextError = reportedError;
-    if (nextError != NoError)
-        nextStatus = MediaStatus::Invalid;
-    else if (source_.isEmpty())
-        nextStatus = MediaStatus::NoMedia;
-    else if (ended)
-        nextStatus = MediaStatus::EndOfMedia;
-    else if (readyState >= 3)
-        nextStatus = MediaStatus::Loaded;
-    else if (readyState == 2)
-        nextStatus = MediaStatus::Buffering;
-    else
-        nextStatus = MediaStatus::Loading;
-
+    const auto milliseconds = [](double value) -> qint64 {
+        // JavaScript integers are exact through 2^53-1, well below qint64's limit.
+        return std::isfinite(value) && value > 0
+                   ? static_cast<qint64>(std::min(std::round(value), 9007199254740991.)) : 0;
+    };
+    const auto duration = source_.isEmpty() ? qint64{0} : milliseconds(timing[0]);
+    const auto position = std::clamp(milliseconds(timing[1]), qint64{0}, duration);
+    const auto nextError = source_.isEmpty() ? NoError :
+        !browserCanFetch(source_) ? UnsupportedSourceError :
+        !frameFits ? DecodeError : info[PollError];
+    const bool ended = info[PollEnded] != 0;
+    const bool playing = info[PollPaused] == 0 && !ended && nextError == NoError;
+    const bool seekable = info[PollSeekable] != 0 && duration > 0 && nextError == NoError;
+    const auto nextStatus = nextError != NoError ? MediaStatus::Invalid :
+        source_.isEmpty() ? MediaStatus::NoMedia : ended ? MediaStatus::EndOfMedia :
+        info[PollReadyState] >= 3 ? MediaStatus::Loaded :
+        info[PollReadyState] == 2 ? MediaStatus::Buffering : MediaStatus::Loading;
     const auto previousDuration = duration_;
     const auto previousPosition = position_;
     const auto previousStatus = status_;
@@ -331,31 +348,48 @@ void WebPlayback::poll() {
     status_ = nextStatus;
     errorCode_ = nextError;
     pump_->setInterval(playing_ ? FrameInterval : IdleInterval);
-    if (duration_ != previousDuration)
+    if (source_.isEmpty() || nextError != NoError) pump_->stop();
+    if (copied != 0) {
+        const QImage frame(pixels_.data(), frameWidth_, frameHeight_, frameWidth_ * 4,
+                           QImage::Format_RGBA8888);
+        emit frameAvailable(frame);
+        if (!unchanged()) return;
+    }
+    if (duration_ != previousDuration) {
         emit durationChanged(duration_);
-    if (seekable_ != wasSeekable)
+        if (!unchanged()) return;
+    }
+    if (seekable_ != wasSeekable) {
         emit seekableChanged();
-    if (playing_ != wasPlaying)
+        if (!unchanged()) return;
+    }
+    if (playing_ != wasPlaying) {
         emit playbackStateChanged();
-    if (position_ != previousPosition)
+        if (!unchanged()) return;
+    }
+    if (position_ != previousPosition) {
         emit positionChanged(position_);
-    if (status_ != previousStatus)
+        if (!unchanged()) return;
+    }
+    if (status_ != previousStatus) {
         emit mediaStatusChanged();
-    if (errorCode_ != previousError)
-        emit errorOccurred();
+        if (!unchanged()) return;
+    }
+    if (errorCode_ != previousError && errorCode_ != NoError) emit errorOccurred();
 }
 
 WebAudioOutput::WebAudioOutput(WebPlayback* playback, QObject* parent)
     : QObject(parent), playback_(playback) {
-    playback_->applyAudio(volume_, muted_);
+    if (playback_) playback_->applyAudio(volume_, muted_);
 }
 
 void WebAudioOutput::setVolume(qreal volume) {
+    if (!std::isfinite(volume)) return;
     const auto clamped = std::clamp<qreal>(volume, 0., 1.);
     if (std::abs(volume_ - clamped) < 1e-6)
         return;
     volume_ = clamped;
-    playback_->applyAudio(clamped, muted_);
+    if (playback_) playback_->applyAudio(clamped, muted_);
     emit volumeChanged(static_cast<float>(clamped));
 }
 
@@ -363,7 +397,7 @@ void WebAudioOutput::setMuted(bool muted) {
     if (muted_ == muted)
         return;
     muted_ = muted;
-    playback_->applyAudio(volume_, muted_);
+    if (playback_) playback_->applyAudio(volume_, muted_);
     emit mutedChanged(muted);
 }
 
