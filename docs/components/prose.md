@@ -63,3 +63,5 @@ platform's idea of a field, which is the one surface a reader never asked for.
 List items get padding, which is the one property that moves Qt's list marker left
 and its text right together. Margin and text-indent move both the same way,
 leaving the gap at nothing, so a list reads as one run.
+
+</div>
