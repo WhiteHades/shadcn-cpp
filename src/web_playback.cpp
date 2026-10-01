@@ -352,7 +352,7 @@ void WebPlayback::poll() {
     if (copied != 0) {
         const QImage frame(pixels_.data(), frameWidth_, frameHeight_, frameWidth_ * 4,
                            QImage::Format_RGBA8888);
-        emit frameAvailable(frame);
+        emit frameAvailable(frame.copy());
         if (!unchanged()) return;
     }
     if (duration_ != previousDuration) {

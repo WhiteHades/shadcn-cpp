@@ -30,10 +30,9 @@ public:
         update();
     }
 
-    /// Takes ownership of the pixels the browser just decoded. Called on the GUI thread
-    /// with a direct connection, so the copy happens before the buffer is written again.
+    /// Shares the owned frame emitted by the browser backend on the GUI thread.
     void submitFrame(const QImage& frame) {
-        frame_ = frame.copy();
+        frame_ = frame;
         update();
     }
 
