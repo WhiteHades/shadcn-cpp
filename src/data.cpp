@@ -13,6 +13,7 @@
 #include <QSignalBlocker>
 #include <QStandardItemModel>
 #include <QToolButton>
+#include <QShortcut>
 #include <QVBoxLayout>
 #include <QVariantAnimation>
 #include <algorithm>
@@ -346,8 +347,7 @@ void Calendar::refreshTheme() {
                         // one chevron at the end of a single month-and-year trigger, so the
                         // indicator is suppressed here rather than left floating mid-bar. The
                         // button still opens its menu on click.
-                        "QToolButton#qt_calendar_monthbutton { padding-right: 4px; "
-                        "qproperty-menuButtonPopup: false; } "
+                        "QToolButton#qt_calendar_monthbutton { padding-right: 4px; } "
                         "QToolButton#qt_calendar_monthbutton::menu-indicator { image: none; "
                         "width: 0px; height: 0px; } "
                         "QToolButton:hover { background: %3; }")
@@ -392,7 +392,16 @@ void Calendar::refreshTheme() {
             button->setAccessibleName(previous ? tr("Previous month") : tr("Next month"));
             button->setAccessibleDescription(
                     previous ? tr("Show the previous month") : tr("Show the next month"));
-            new detail::FocusRing(*button);
+            if (!button->property("shadcnCalendarKeyboard").toBool()) {
+                button->setProperty("shadcnCalendarKeyboard", true);
+                new detail::FocusRing(*button);
+                // HTML buttons activate on Enter; Qt tool buttons supply Space natively.
+                for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+                    auto* activate = new QShortcut(QKeySequence(key), button);
+                    activate->setContext(Qt::WidgetShortcut);
+                    connect(activate, &QShortcut::activated, button, &QToolButton::click);
+                }
+            }
         }
     }
     updateCells();

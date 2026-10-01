@@ -159,6 +159,7 @@ void install(QApplication& app, Theme theme, MotionPolicy motion, int fontPixels
     palette.setColor(QPalette::Window, color(theme, Role::Background));
     palette.setColor(QPalette::WindowText, color(theme, Role::Foreground));
     palette.setColor(QPalette::Base, color(theme, Role::Background));
+    palette.setColor(QPalette::AlternateBase, color(theme, Role::Muted));
     palette.setColor(QPalette::Text, color(theme, Role::Foreground));
     palette.setColor(QPalette::Button, color(theme, Role::Secondary));
     palette.setColor(QPalette::ButtonText, color(theme, Role::SecondaryForeground));
