@@ -17,7 +17,7 @@ title: Tree View
 ## Usage
 
 `TreeView` is a `QTreeView` and reads the same `RowRole`s as
-[List View](/docs/components/list-view). Expansion is the model's, so a collapse
+[List View](./list-view.md). Expansion is the model's, so a collapse
 survives a repaint and the view never holds a second copy of the state.
 
 ```cpp
@@ -66,3 +66,5 @@ The affordance is placed clear of the row's own fill and border. A one pixel
 border running beside a 16 pixel affordance is as tall as the affordance, and it
 hides which way the chevron points, which is the one thing the affordance exists
 to say.
+
+</div>
