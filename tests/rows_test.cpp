@@ -85,6 +85,22 @@ class CountingModel final : public QAbstractListModel {
 class RowsTest : public QObject {
     Q_OBJECT
   private slots:
+    void visibleRowsSurviveSpacingAtTheViewportTop() {
+        QStandardItemModel model;
+        for(int i=0;i<100;++i)model.appendRow(new QStandardItem(QString::number(i)));
+        shadcn::ListView list;
+        list.setModel(&model);
+        list.setSpacing(3);
+        list.resize(360,160);
+        list.show();
+        QCoreApplication::processEvents();
+        QVERIFY(list.visualRect(model.index(0,0)).intersects(list.viewport()->rect()));
+        QVERIFY(!list.visibleRowRects().isEmpty());
+        list.scrollTo(model.index(50,0),QAbstractItemView::PositionAtTop);
+        QCoreApplication::processEvents();
+        QVERIFY(!list.visibleRowRects().isEmpty());
+        QVERIFY(list.visibleRowRects().size()<10);
+    }
     void visibleRowsExcludeScrolledRows() {
         CountingModel model(20000);
         shadcn::ListView list;

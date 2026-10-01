@@ -336,7 +336,11 @@ void ListView::setCompactBelow(int breakpoint) {
 QList<QRect> ListView::visibleRowRects() const {
     QList<QRect> result;
     if (!model()) return result;
-    const auto first = indexAt(QPoint(viewport()->width() / 2, 0));
+    QModelIndex first;
+    // Spacing can leave the top pixel between rows. Search only the viewport,
+    // keeping discovery independent of the number of scrolled model rows.
+    for (int y = 0; y < viewport()->height() && !first.isValid(); ++y)
+        first = indexAt(QPoint(viewport()->width() / 2, y));
     if (!first.isValid()) return result;
     for (int row = first.row(); row < model()->rowCount(rootIndex()); ++row) {
         if (isRowHidden(row)) continue;
