@@ -38,22 +38,11 @@ inline QString themedScrollBarSheet(const QWidget& widget) {
                                      ringColor(theme, Role::Muted).name(QColor::HexArgb));
 }
 
-/// Puts the themed scrollbar chrome on a widget, at most once per theme.
-///
-/// Applying a stylesheet sends `QEvent::StyleChange` to the widget it is applied
-/// to, so a surface that rebuilt its sheet from inside its own style-change
-/// handler would recurse until the stack ran out. The sheet only depends on the
-/// theme, so it is only rewritten when the theme moved, and the answer is
-/// remembered on the widget so two surfaces on screen cannot evict each other into
-/// rewriting it.
+/// Reapply only changed colours. Each widget's sheet is its own cache and also
+/// guards the synchronous StyleChange sent by setStyleSheet.
 inline void refreshScrollBars(QWidget& widget) {
-    static thread_local QPointer<QWidget> seen;
-    static thread_local const Theme* seenTheme = nullptr;
-    if (seenTheme != &ringTheme(widget) || seen != &widget) {
-        seen = &widget;
-        seenTheme = &ringTheme(widget);
-        widget.setStyleSheet(themedScrollBarSheet(widget));
-    }
+    const auto sheet = themedScrollBarSheet(widget);
+    if (widget.styleSheet() != sheet) widget.setStyleSheet(sheet);
 }
 
 }  // namespace shadcn::detail

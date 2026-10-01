@@ -12,6 +12,7 @@
 #include <QTreeWidgetItem>
 #include <QVariant>
 #include <QSet>
+#include <QScrollBar>
 
 #include <shadcn/rows.hpp>
 
@@ -84,6 +85,68 @@ class CountingModel final : public QAbstractListModel {
 class RowsTest : public QObject {
     Q_OBJECT
   private slots:
+    void visibleRowsExcludeScrolledRows() {
+        CountingModel model(20000);
+        shadcn::ListView list;
+        shadcn::TreeView tree;
+        for (auto* view : {static_cast<QAbstractItemView*>(&list),
+                           static_cast<QAbstractItemView*>(&tree)}) {
+            view->setModel(&model);
+            view->resize(360, 160);
+            view->show();
+            QCoreApplication::processEvents();
+            view->scrollTo(model.index(19990, 0), QAbstractItemView::PositionAtTop);
+            QCoreApplication::processEvents();
+            const auto rows = view == &list ? list.visibleRowRects() : tree.visibleRowRects();
+            QVERIFY(!rows.isEmpty());
+            QVERIFY2(rows.size() < 10, qPrintable(QString::number(rows.size())));
+            for (const auto& row : rows)
+                QVERIFY(row.intersects(view->viewport()->rect()));
+            view->hide();
+        }
+    }
+    void visibleRowsRespectRootsAndHiddenTreeRows() {
+        QStandardItemModel model;
+        auto* root = new QStandardItem("Root");
+        for (int i = 0; i < 12; ++i) root->appendRow(new QStandardItem(QString::number(i)));
+        model.appendRow(root);
+        shadcn::ListView list;
+        shadcn::TreeView tree;
+        for (auto* view : {static_cast<QAbstractItemView*>(&list),
+                           static_cast<QAbstractItemView*>(&tree)}) {
+            view->setModel(&model);
+            view->setRootIndex(root->index());
+            view->resize(360, 160);
+            view->show();
+            QCoreApplication::processEvents();
+        }
+        tree.setRowHidden(0, root->index(), true);
+        QCoreApplication::processEvents();
+        const auto listRows = list.visibleRowRects();
+        const auto treeRows = tree.visibleRowRects();
+        QVERIFY(listRows.size() > 1);
+        QVERIFY(treeRows.size() > 1);
+        QCOMPARE(listRows.first(), list.visualRect(root->child(0)->index()));
+        QCOMPARE(treeRows.first(), tree.visualRect(root->child(1)->index()));
+    }
+    void scrollbarRefreshDoesNotReapplyAnUnchangedSheet() {
+        class Observer final : public QObject {
+        public:
+            int changes = 0;
+            bool eventFilter(QObject*, QEvent* event) override {
+                if (event->type() == QEvent::StyleChange) ++changes;
+                return false;
+            }
+        } observer;
+        shadcn::ListView list;
+        shadcn::TreeView tree;
+        list.installEventFilter(&observer);
+        QEvent first(QEvent::StyleChange);
+        QApplication::sendEvent(&tree, &first);
+        QEvent second(QEvent::StyleChange);
+        QApplication::sendEvent(&list, &second);
+        QCOMPARE(observer.changes, 1);
+    }
     void initTestCase() {
         shadcn::install(*qApp, shadcn::Theme::neutral(), shadcn::MotionPolicy::Reduced);
     }
