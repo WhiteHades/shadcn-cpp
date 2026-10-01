@@ -1533,7 +1533,7 @@ Empty::Empty(QWidget* parent) : QFrame(parent), title_(new QLabel(this)),
     description_->setAlignment(Qt::AlignCenter);
     content_->setContentsMargins(24, 24, 24, 24);
     content_->setSpacing(8);
-    content_->setAlignment(Qt::AlignCenter);
+    content_->setAlignment(Qt::AlignVCenter);
     content_->addWidget(title_);
     content_->addWidget(description_);
 }
