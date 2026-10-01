@@ -25,10 +25,64 @@
 #include <QVBoxLayout>
 #include <QVariantAnimation>
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace shadcn {
 namespace {
+
+const Theme& themeFor(const QWidget& widget);
+
+struct ThemeSnapshot {
+    ColorMode mode;
+    double radius;
+    std::array<Rgba, static_cast<std::size_t>(Role::Count)> colours;
+    constexpr bool operator==(const ThemeSnapshot&) const = default;
+};
+
+ThemeSnapshot themeSnapshot(const QWidget& widget) {
+    const auto& theme = themeFor(widget);
+    ThemeSnapshot result{theme.mode(), theme.radius(), {}};
+    for (std::size_t i = 0; i < result.colours.size(); ++i)
+        result.colours[i] = theme.color(static_cast<Role>(i));
+    return result;
+}
+
+class ThemeObserver final : public QObject {
+public:
+    ThemeObserver(QWidget& widget, std::function<void()> refresh)
+        : QObject(&widget), widget_(&widget), refresh_(std::move(refresh)),
+          snapshot_(themeSnapshot(widget)) {
+        widget.installEventFilter(this);
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (watched == widget_ &&
+            (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) &&
+            !pending_ && themeSnapshot(*widget_) != snapshot_) {
+            pending_ = true;
+            const QPointer<ThemeObserver> self(this);
+            QTimer::singleShot(0, widget_, [self] {
+                if (!self) return;
+                self->pending_ = false;
+                self->snapshot_ = themeSnapshot(*self->widget_);
+                self->refresh_();
+            });
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QPointer<QWidget> widget_;
+    std::function<void()> refresh_;
+    ThemeSnapshot snapshot_;
+    bool pending_ = false;
+};
+
+void observeTheme(QWidget& widget, std::function<void()> refresh) {
+    new ThemeObserver(widget, std::move(refresh));
+}
 
 const Theme& themeFor(const QWidget& widget) {
     if (const auto* style = qobject_cast<const Style*>(widget.style())) return style->theme();
@@ -75,6 +129,44 @@ QIcon accordionIcon(const QWidget& owner, bool expanded) {
         painter.drawLine(QPointF(8.0, 10.5), QPointF(12.5, 6.0));
     }
     return QIcon(pixmap);
+}
+
+QString accordionTriggerSheet(const QWidget& owner) {
+    return QStringLiteral(
+               "QPushButton { color:%1; background:transparent; border:1px solid transparent; "
+               "border-radius:8px; padding:10px 0; text-align:left; font-weight:500; }"
+               "QPushButton:hover { text-decoration:underline; }"
+               "QPushButton:focus { border-color:%2; }"
+               "QPushButton:disabled { color:%3; }")
+        .arg(rgb(colour(owner, Role::Foreground)), rgb(colour(owner, Role::Ring)),
+             rgb(colour(owner, Role::MutedForeground)));
+}
+
+QString scrollAreaSheet(const QWidget& owner) {
+    return QStringLiteral(
+               "QScrollBar:vertical { width:10px; background:transparent; margin:0; }"
+               "QScrollBar:horizontal { height:10px; background:transparent; margin:0; }"
+               "QScrollBar::handle { background:%1; border-radius:5px; min-height:24px; min-width:24px; }"
+               "QScrollBar::handle:hover { background:%2; }"
+               "QScrollBar::add-line, QScrollBar::sub-line { width:0; height:0; }"
+               "QScrollBar::add-page, QScrollBar::sub-page { background:transparent; }")
+        .arg(rgb(colour(owner, Role::Border)), rgb(colour(owner, Role::Muted)));
+}
+
+QString navigationPopupSheet(const QWidget& owner) {
+    return QStringLiteral("QFrame { background:%1; border:1px solid %2; border-radius:8px; }")
+        .arg(rgb(colour(owner, Role::Popover)), rgb(colour(owner, Role::Border)));
+}
+
+QString menubarSheet(const QWidget& owner) {
+    return QStringLiteral(
+               "QMenuBar { background:%1; color:%2; border:1px solid %3; border-radius:8px; "
+               "padding:3px; spacing:2px; }"
+               "QMenuBar::item { padding:3px 8px; border-radius:5px; }"
+               "QMenuBar::item:selected, QMenuBar::item:pressed { background:%4; color:%5; }")
+        .arg(rgb(colour(owner, Role::Background)), rgb(colour(owner, Role::Foreground)),
+             rgb(colour(owner, Role::Border)), rgb(colour(owner, Role::Muted)),
+             rgb(colour(owner, Role::Foreground)));
 }
 
 void rounded(QPainter& painter, const QRectF& rect, double radius,
@@ -160,15 +252,7 @@ AccordionItem::AccordionItem(const QString& title, QWidget* parent)
     trigger_->setIcon(accordionIcon(*this, false));
     trigger_->setIconSize(QSize(16, 16));
     trigger_->setLayoutDirection(Qt::RightToLeft);
-    trigger_->setStyleSheet(QStringLiteral(
-                                "QPushButton { color:%1; background:transparent; border:1px solid transparent; "
-                                "border-radius:8px; padding:10px 0; text-align:left; font-weight:500; }"
-                                "QPushButton:hover { text-decoration:underline; }"
-                                "QPushButton:focus { border-color:%2; }"
-                                "QPushButton:disabled { color:%3; }")
-                                .arg(rgb(colour(*this, Role::Foreground)),
-                                     rgb(colour(*this, Role::Ring)),
-                                     rgb(colour(*this, Role::MutedForeground))));
+    trigger_->setStyleSheet(accordionTriggerSheet(*this));
     content_->setContentsMargins(0, 0, 0, 10);
     content_->setSpacing(8);
     contentHost_->setVisible(false);
@@ -184,6 +268,10 @@ AccordionItem::AccordionItem(const QString& title, QWidget* parent)
         else contentHost_->setVisible(false);
     });
     trigger_->installEventFilter(this);
+    observeTheme(*this, [this] {
+        trigger_->setIcon(accordionIcon(*this, expanded_));
+        trigger_->setStyleSheet(accordionTriggerSheet(*this));
+    });
 }
 
 QString AccordionItem::title() const {
@@ -384,6 +472,7 @@ Collapsible::Collapsible(const QString& title, QWidget* parent)
         contentHost_->setMaximumHeight(open_ ? QWIDGETSIZE_MAX : 0);
         contentHost_->setVisible(open_);
     });
+    observeTheme(*this, [this] { styleTrigger(*trigger_, *this); });
 }
 
 QVBoxLayout& Collapsible::content() { return *content_; }
@@ -437,6 +526,7 @@ Tabs::Tabs(Qt::Orientation orientation, QWidget* parent)
     outer->addWidget(stack_, 1);
     setFocusPolicy(Qt::StrongFocus);
     restyle();
+    observeTheme(*this, [this] { restyle(); });
 }
 
 void Tabs::setOrientation(Qt::Orientation orientation) {
@@ -657,16 +747,8 @@ ScrollArea::ScrollArea(QWidget* parent) : QScrollArea(parent) {
     setFrameStyle(QFrame::NoFrame);
     setWidgetResizable(true);
     setFocusPolicy(Qt::StrongFocus);
-    const auto border = rgb(colour(*this, Role::Border));
-    const auto muted = rgb(colour(*this, Role::Muted));
-    setStyleSheet(QStringLiteral(
-                      "QScrollBar:vertical { width:10px; background:transparent; margin:0; }"
-                      "QScrollBar:horizontal { height:10px; background:transparent; margin:0; }"
-                      "QScrollBar::handle { background:%1; border-radius:5px; min-height:24px; min-width:24px; }"
-                      "QScrollBar::handle:hover { background:%2; }"
-                      "QScrollBar::add-line, QScrollBar::sub-line { width:0; height:0; }"
-                      "QScrollBar::add-page, QScrollBar::sub-page { background:transparent; }")
-                      .arg(border, muted));
+    setStyleSheet(scrollAreaSheet(*this));
+    observeTheme(*this, [this] { setStyleSheet(scrollAreaSheet(*this)); });
 }
 
 void ScrollArea::setHorizontalScrollBarVisible(bool visible) {
@@ -722,7 +804,7 @@ QList<int> ResizablePanelGroup::panelSizes() const { return QSplitter::sizes(); 
 
 void ResizablePanelGroup::setHandleVisible(bool visible) {
     handleVisible_ = visible;
-    setHandleWidth(visible ? 6 : 0);
+    setHandleWidth(visible ? 24 : 0);
 }
 
 QSplitterHandle* ResizablePanelGroup::createHandle() {
@@ -785,6 +867,7 @@ Sidebar::Sidebar(QWidget* parent)
         update();
     });
     updateWidth(false);
+    observeTheme(*this, [this] { restyleItems(); });
 }
 
 void Sidebar::setSide(SidebarSide side) {
@@ -927,50 +1010,7 @@ void Sidebar::paintEvent(QPaintEvent*) {
     rounded(painter, QRectF(rect()).adjusted(.5, .5, -.5, -.5), 10, fill, border);
 }
 
-bool Sidebar::event(QEvent* event) {
-    const auto result = QFrame::event(event);
-    if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange) {
-        // The rebuild is deferred to the next turn of the event loop. Two things
-        // make it necessary and two make it sufficient.
-        //
-        // Necessary: setting a child's style sheet from inside a paint event, or
-        // from inside the style change that is still propagating, leaves that child
-        // repainting a frame later. A caller that renders once, as a screenshot
-        // harness and a compositor both do, sees the item still wearing the old
-        // mode's colours.
-        //
-        // Sufficient: the guard inside the rebuild compares the accent by value, so
-        // a style change that turns out to carry the same colours does nothing, and
-        // one that does carry different ones is never skipped for landing on an
-        // address the previous theme had.
-        QTimer::singleShot(0, this, [this] {
-            restyleItems();
-            update();
-        });
-        update();
-        restyleItems();
-        update();
-    }
-    return result;
-}
-
 void Sidebar::restyleItems() {
-    // The items carry a style sheet built from theme roles, and it was built once,
-    // when the item was created. Left alone, a rail switched to dark keeps the
-    // colours of the mode it was built in: the open item stays a near-white block
-    // on a near-black page. A rail of navigation that does not follow the theme is
-    // the light component in the middle of a dark interface.
-    // What was last applied is remembered by value, not by address. Replacing the
-    // style frees the old one and installs a new one, and a fresh allocation can land
-    // on the address the old one had, so comparing pointers can decide nothing changed
-    // when everything did. The accent is the colour the items are actually painted
-    // with, so a change in it is the change that matters, and the mode catches the
-    // case where a high contrast remap alters it without the style object moving.
-    const auto& current = themeFor(*this);
-    const auto accent = current.color(Role::SidebarAccent);
-    if (itemsUseAccent_ == accent && itemsUseMode_ == current.mode()) return;
-    itemsUseAccent_ = accent;
-    itemsUseMode_ = current.mode();
     for (auto* button : findChildren<QPushButton*>())
         if (button->property("shadcnSidebarVariant").isValid())
             button->setStyleSheet(sidebarMenuButtonSheet(
@@ -1071,9 +1111,13 @@ NavigationMenu::NavigationMenu(QWidget* parent)
     popup_->setFocusPolicy(Qt::StrongFocus);
     popup_->installEventFilter(this);
     popup_->setFrameStyle(QFrame::StyledPanel);
-    popup_->setStyleSheet(QStringLiteral("QFrame { background:%1; border:1px solid %2; border-radius:8px; }")
-                              .arg(rgb(colour(*this, Role::Popover)), rgb(colour(*this, Role::Border))));
+    popup_->setStyleSheet(navigationPopupSheet(*this));
     setMinimumHeight(36);
+    observeTheme(*this, [this] {
+        popup_->setStyleSheet(navigationPopupSheet(*this));
+        for (auto& entry : entries_)
+            if (entry.button) styleTrigger(*entry.button, *this, entry.button->isChecked());
+    });
 }
 
 QPushButton& NavigationMenu::addLink(const QString& text, const QString& value) {
@@ -1128,7 +1172,7 @@ QHBoxLayout& NavigationMenu::list() { return *list_; }
 
 void NavigationMenu::choose(int index) {
     if (index < 0 || index >= static_cast<int>(entries_.size()) ||
-        !entries_.at(index).button->isEnabled()) return;
+        !entries_.at(index).button || !entries_.at(index).button->isEnabled()) return;
     const auto& entry = entries_.at(index);
     if (entry.menu) {
         if (current_ == index && popup_->isVisible()) {
@@ -1165,7 +1209,7 @@ void NavigationMenu::choose(int index) {
             if (item.content) item.content->hide();
     }
     for (int i = 0; i < static_cast<int>(entries_.size()); ++i)
-        entries_.at(i).button->setChecked(i == current_);
+        if (entries_.at(i).button) entries_.at(i).button->setChecked(i == current_);
     emit currentChanged(currentValue());
 }
 
@@ -1243,14 +1287,8 @@ bool NavigationMenu::eventFilter(QObject* watched, QEvent* event) {
 Menubar::Menubar(QWidget* parent) : QMenuBar(parent) {
     setNativeMenuBar(false);
     setMouseTracking(true);
-    setStyleSheet(QStringLiteral(
-                      "QMenuBar { background:%1; color:%2; border:1px solid %3; border-radius:8px; "
-                      "padding:3px; spacing:2px; }"
-                      "QMenuBar::item { padding:3px 8px; border-radius:5px; }"
-                      "QMenuBar::item:selected, QMenuBar::item:pressed { background:%4; color:%5; }")
-                      .arg(rgb(colour(*this, Role::Background)), rgb(colour(*this, Role::Foreground)),
-                           rgb(colour(*this, Role::Border)), rgb(colour(*this, Role::Muted)),
-                           rgb(colour(*this, Role::Foreground))));
+    setStyleSheet(menubarSheet(*this));
+    observeTheme(*this, [this] { setStyleSheet(menubarSheet(*this)); });
 }
 
 void Menubar::paintEvent(QPaintEvent* event) {
@@ -1259,6 +1297,7 @@ void Menubar::paintEvent(QPaintEvent* event) {
 
 DropdownMenu::DropdownMenu(QWidget* parent) : QMenu(parent), radioGroup_(new QActionGroup(this)) {
     setStyleSheet(menuStyle(*this));
+    observeTheme(*this, [this] { setStyleSheet(menuStyle(*this)); });
     setSeparatorsCollapsible(false);
     radioGroup_->setExclusive(true);
 }

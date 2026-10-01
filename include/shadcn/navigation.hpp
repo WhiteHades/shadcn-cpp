@@ -262,18 +262,10 @@ signals:
     void openChanged(bool open);
 protected:
     void paintEvent(QPaintEvent*) override;
-    bool event(QEvent* event) override;
 private:
     void updateWidth(bool animate);
-    /// Rebuilds the items' style sheets when the theme behind the rail has moved.
-    /// Done at paint time because that is the first moment the theme is settled.
+    /// Rebuilds the items' style sheets after the theme behind the rail changes.
     void restyleItems();
-    /// The accent the items' sheets were last built from, and the mode they were
-    /// built in. Both are values: the style object is freed and replaced on every
-    /// theme change and can be reallocated at the same address, so a pointer would
-    /// not tell a changed theme from an unchanged one.
-    Rgba itemsUseAccent_{};
-    ColorMode itemsUseMode_ = ColorMode::Light;
     SidebarSide side_ = SidebarSide::Left;
     SidebarCollapsible collapsible_ = SidebarCollapsible::Offcanvas;
     SidebarVariant variant_ = SidebarVariant::Sidebar;
