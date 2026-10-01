@@ -12,7 +12,7 @@
 #include <QTreeWidgetItem>
 #include <QVariant>
 #include <QSet>
-#include <QScrollBar>
+#include <memory>
 
 #include <shadcn/rows.hpp>
 
@@ -170,6 +170,7 @@ class RowsTest : public QObject {
             shadcn::install(*qApp, shadcn::Theme::neutral(mode), shadcn::MotionPolicy::Reduced);
             auto* model = new CountingModel(3);
             shadcn::ListView list;
+            model->setParent(&list);
             list.setModel(model);
             list.resize(360, 200);
             list.show();
@@ -241,6 +242,7 @@ class RowsTest : public QObject {
     void keyboardMovesAndSelectsThroughTheViewModel() {
         auto* model = new CountingModel(400);
         shadcn::ListView list;
+        model->setParent(&list);
         list.setModel(model);
         list.resize(360, 160);
         list.show();
@@ -268,6 +270,7 @@ class RowsTest : public QObject {
     void onlyTheVisibleRowsAreBuilt() {
         auto* model = new CountingModel(400);
         shadcn::ListView list;
+        model->setParent(&list);
         list.setModel(model);
         list.resize(360, 160);
         list.show();
@@ -292,6 +295,7 @@ class RowsTest : public QObject {
         // nearly fits proves nothing: walking all of it would still be in budget.
         auto* model = new CountingModel(2000);
         shadcn::ListView list;
+        model->setParent(&list);
         list.setModel(model);
         list.resize(360, 200);
         list.show();
@@ -324,6 +328,7 @@ class RowsTest : public QObject {
     void explicitDensityIsNotUndoneByTheBreakpoint() {
         auto* model = new CountingModel(50);
         shadcn::ListView list;
+        model->setParent(&list);
         list.setModel(model);
         list.setCompactBelow(400);
         list.resize(360, 600);
@@ -358,6 +363,7 @@ class RowsTest : public QObject {
     void progressTracksTheRow() {
         auto* model = new CountingModel(3);
         shadcn::ListView list;
+        model->setParent(&list);
         list.setModel(model);
         list.setCompactBelow(300);
         list.resize(360, 400);
@@ -466,6 +472,7 @@ class RowsTest : public QObject {
     void densityFollowsTheAvailableHeight() {
         auto* model = new CountingModel(50);
         shadcn::ListView list;
+        model->setParent(&list);
         list.setModel(model);
         list.setCompactBelow(400);
         list.resize(360, 600);
@@ -661,8 +668,9 @@ class RowsTest : public QObject {
     /// same geometry, because motion is not allowed to be the only difference.
     void motionPolicyDoesNotChangeRowGeometry() {
         shadcn::install(*qApp, shadcn::Theme::neutral(), shadcn::MotionPolicy::Full);
-        auto* reduced = new shadcn::ListView;
+        auto reduced = std::make_unique<shadcn::ListView>();
         auto* model = new CountingModel(20);
+        model->setParent(reduced.get());
         reduced->setModel(model);
         reduced->resize(360, 200);
         reduced->show();
@@ -671,7 +679,7 @@ class RowsTest : public QObject {
         const auto reducedRects = reduced->visibleRowRects();
 
         shadcn::install(*qApp, shadcn::Theme::neutral(), shadcn::MotionPolicy::Reduced);
-        auto* still = new shadcn::ListView;
+        auto still = std::make_unique<shadcn::ListView>();
         still->setModel(model);
         still->resize(360, 200);
         still->show();
