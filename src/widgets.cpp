@@ -738,6 +738,12 @@ Card::Card(QWidget* parent) : QFrame(parent) {
 
     updatePalette();
 }
+Card::~Card() {
+    // Lazy sections acquire a Qt parent only when attached to the outer layout.
+    const QPointer<QLayout> sections[] = {header_, content_, footer_, action_};
+    for (const auto& section : sections)
+        if (section && !section->parent()) delete section.data();
+}
 QLayout* Card::layoutFor(Slot slot) const {
     switch (slot) {
     case Header: return header_;

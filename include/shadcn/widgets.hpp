@@ -256,6 +256,7 @@ class Card : public QFrame {
     Q_OBJECT
 public:
     explicit Card(QWidget* parent = nullptr);
+    ~Card() override;
     void setTitle(const QString& title);
     void setDescription(const QString& description);
     /// Draws a rule above the footer row and gives it the padding that rule implies. The
