@@ -155,10 +155,6 @@ class TreeView : public QTreeView {
     /// Toggles the branch under a press. Returns true when the press landed on an
     /// affordance, so the caller knows the row was not also selected.
     bool toggleAt(const QPoint& position);
-    /// Walks the expanded rows on screen. It stops at the first row past the
-    /// viewport, so asking what is visible does not lay out the whole tree.
-    void collectVisible(const QAbstractItemModel& source, const QModelIndex& parent,
-                        QList<QRect>& into) const;
     RowDelegate* delegate_ = nullptr;
     RowDensity density_;
 };

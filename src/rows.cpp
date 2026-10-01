@@ -336,13 +336,14 @@ void ListView::setCompactBelow(int breakpoint) {
 QList<QRect> ListView::visibleRowRects() const {
     QList<QRect> result;
     if (!model()) return result;
-    // Walking stops at the first row past the viewport, so asking what is on
-    // screen does not itself lay out the whole set.
-    for (int row = 0; row < model()->rowCount(); ++row) {
-        const auto rect = visualRect(model()->index(row, 0));
-        if (!rect.isValid()) break;
+    const auto first = indexAt(QPoint(viewport()->width() / 2, 0));
+    if (!first.isValid()) return result;
+    for (int row = first.row(); row < model()->rowCount(rootIndex()); ++row) {
+        if (isRowHidden(row)) continue;
+        const auto rect = visualRect(model()->index(row, modelColumn(), rootIndex()));
+        if (!rect.isValid()) continue;
         if (rect.top() >= viewport()->height()) break;
-        result.append(rect);
+        if (rect.intersects(viewport()->rect())) result.append(rect);
     }
     return result;
 }
@@ -440,20 +441,13 @@ void TreeView::setCompactBelow(int breakpoint) {
 QList<QRect> TreeView::visibleRowRects() const {
     QList<QRect> result;
     if (!model()) return result;
-    collectVisible(*model(), {}, result);
-    return result;
-}
-
-void TreeView::collectVisible(const QAbstractItemModel& source, const QModelIndex& parent,
-                              QList<QRect>& into) const {
-    for (int row = 0; row < source.rowCount(parent); ++row) {
-        const auto index = source.index(row, 0, parent);
+    for (auto index = indexAt(QPoint(viewport()->width() / 2, 0)); index.isValid();
+         index = indexBelow(index)) {
         const auto rect = visualRect(index);
-        if (!rect.isValid()) return;
-        if (rect.top() >= viewport()->height()) return;
-        into.append(rect);
-        if (isExpanded(index)) collectVisible(source, index, into);
+        if (rect.top() >= viewport()->height()) break;
+        if (rect.intersects(viewport()->rect())) result.append(rect);
     }
+    return result;
 }
 
 QRect TreeView::disclosureRect(const QModelIndex& index) const {
