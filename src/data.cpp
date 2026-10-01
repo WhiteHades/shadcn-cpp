@@ -17,6 +17,7 @@
 #include <QVariantAnimation>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <shadcn/data.hpp>
 #include "focus_ring.hpp"
@@ -1025,6 +1026,13 @@ QColor mix(const QColor& from, const QColor& to, double t) {
 }
 } // namespace
 
+namespace {
+constexpr double kHeatmapCell = 12.0;
+constexpr double kHeatmapGap = 3.0;
+constexpr int kHeatmapLegend = 22;
+constexpr qint64 kHeatmapMaxWeeks = (QWIDGETSIZE_MAX - 28) / 15;
+} // namespace
+
 Heatmap::Heatmap(QWidget* parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -1036,8 +1044,19 @@ Heatmap::Heatmap(QWidget* parent) : QWidget(parent) {
 }
 
 std::expected<void, ValueError> Heatmap::setDays(QList<HeatmapDay> days) {
-    for (const auto& day : days)
+    for (const auto& day : days) {
         if (!std::isfinite(day.value)) return std::unexpected(ValueError::NonFinite);
+        if (!day.date.isValid()) return std::unexpected(ValueError::OutOfRange);
+    }
+    if (!days.isEmpty()) {
+        const auto [first, last] = std::minmax_element(days.begin(), days.end(),
+            [](const HeatmapDay& a, const HeatmapDay& b) { return a.date < b.date; });
+        // Leave room for either weekday origin and keep every size/index in range.
+        if (!first->date.addDays(-6).isValid() || !last->date.addDays(6).isValid() ||
+            first->date.daysTo(last->date) > (kHeatmapMaxWeeks - 1) * 7 ||
+            days.size() > std::numeric_limits<int>::max())
+            return std::unexpected(ValueError::OutOfRange);
+    }
     input_ = std::move(days);
     relayout();
     return {};
@@ -1055,6 +1074,7 @@ void Heatmap::setLevelCount(int count) {
 }
 
 void Heatmap::setStartOfWeek(Qt::DayOfWeek day) {
+    if (day < Qt::Monday || day > Qt::Sunday || day == startOfWeek_) return;
     startOfWeek_ = day;
     relayout();
 }
@@ -1095,35 +1115,23 @@ void Heatmap::relayout() {
     }
     const auto first = input_.first().date;
     const auto last = input_.last().date;
-    const auto firstWeekStart = first.addDays(-((first.dayOfWeek() - startOfWeek_ + 7) % 7));
+    firstWeekStart_ = first.addDays(-((first.dayOfWeek() - startOfWeek_ + 7) % 7));
     const auto lastWeekStart = last.addDays(-((last.dayOfWeek() - startOfWeek_ + 7) % 7));
     // Both starts are the same weekday, so the span is a whole number of weeks
     // and the count is that span plus the week the first day falls in.
-    weeks_ = int(firstWeekStart.daysTo(lastWeekStart) / 7) + 1;
+    weeks_ = int(firstWeekStart_.daysTo(lastWeekStart) / 7) + 1;
 
-    // One cell per weekday row per week column, so a caller reading rowCount and
-    // weekCount gets the full grid rather than a ragged set of days.
-    cells_ = std::vector<Cell>(static_cast<size_t>(weeks_ * 7));
-    for (int week = 0; week < weeks_; ++week) {
-        for (int day = 0; day < 7; ++day) {
-            auto& cell = cells_[static_cast<size_t>(week * 7 + day)];
-            cell.date = firstWeekStart.addDays(week * 7 + day);
-            cell.filled = false;
-            cell.value = 0;
-            cell.level = 0;
-        }
-    }
+    cells_.reserve(static_cast<size_t>(input_.size()));
     for (const auto& day : input_) {
-        const auto weekStart = day.date.addDays(-((day.date.dayOfWeek() - startOfWeek_ + 7) % 7));
-        // Measure forwards from the first column. Both dates are the same
-        // weekday, so the span is a whole number of weeks and truncation is
-        // exact.
-        const auto week = int(firstWeekStart.daysTo(weekStart) / 7);
-        const auto row = int((day.date.dayOfWeek() - startOfWeek_ + 7) % 7);
-        if (week < 0 || week >= weeks_ || row < 0 || row >= 7) continue;
-        auto& cell = cells_[static_cast<size_t>(week * 7 + row)];
+        auto found = index_.constFind(day.date);
+        if (found == index_.constEnd()) {
+            const auto offset = static_cast<int>(cells_.size());
+            cells_.push_back({day.date});
+            index_.insert(day.date, offset);
+            found = index_.constFind(day.date);
+        }
+        auto& cell = cells_[static_cast<size_t>(*found)];
         cell.value = day.value;
-        cell.filled = true;
         // Four buckets over the caller's maximum, with the lowest non-empty
         // bucket starting above empty rather than at it. A day with any value is
         // never drawn as an empty cell, because that would say "nothing happened"
@@ -1131,31 +1139,14 @@ void Heatmap::relayout() {
         const auto fraction = std::clamp(day.value / maximum_, 0.0, 1.0);
         cell.level = fraction <= 0 ? 1
                                    : std::min(levelCount_, 1 + int(fraction * levelCount_));
-        index_.insert(day.date, int(&cell - cells_.data()));
     }
     if (selected_.x() >= weeks_) selected_ = {-1, -1};
     if (hovered_.x() >= weeks_) hovered_ = {-1, -1};
-    if (selected_.x() < 0) {
-        // Default the selection to the most recent day so the grid has a
-        // described state the moment it is shown.
-        for (int week = weeks_ - 1; week >= 0 && selected_.x() < 0; --week)
-            for (int day = 6; day >= 0; --day) {
-                const auto* entry = cellAt(QPoint(week, day));
-                if (!entry || !entry->filled) continue;
-                selected_ = {week, day};
-                break;
-            }
-    }
+    if (selected_.x() < 0) selected_ = cellFor(last);
     announceSelection();
     updateGeometry();
     update();
 }
-
-namespace {
-constexpr double kHeatmapCell = 12.0;
-constexpr double kHeatmapGap = 3.0;
-constexpr int kHeatmapLegend = 22;
-} // namespace
 
 QSize Heatmap::sizeHint() const {
     return {int(weeks_ * (kHeatmapCell + kHeatmapGap)) + (weekdayLabels_ ? 28 : 0),
@@ -1176,15 +1167,21 @@ QRectF Heatmap::cellRect(int week, int day) const {
 }
 
 QPoint Heatmap::cellAt(const QPointF& position) const {
-    for (int week = 0; week < weeks_; ++week)
-        for (int day = 0; day < 7; ++day)
-            if (cellRect(week, day).adjusted(-1, -1, 1, 1).contains(position)) return {week, day};
+    const auto x = position.x() - (weekdayLabels_ ? 28.0 : 0.0) + 1;
+    const auto y = position.y() + 1;
+    const auto pitch = (height() - (legend_ ? kHeatmapLegend : 0)) / 7.0;
+    if (pitch <= 0 || !std::isfinite(x) || !std::isfinite(y) ||
+        x < 0 || x >= weeks_ * (kHeatmapCell + kHeatmapGap) || y < 0 || y >= pitch * 7)
+        return {-1, -1};
+    const auto week = static_cast<int>(x / (kHeatmapCell + kHeatmapGap));
+    const auto day = static_cast<int>(y / pitch);
+    if (cellRect(week, day).adjusted(-1, -1, 1, 1).contains(position)) return {week, day};
     return {-1, -1};
 }
 
 const Heatmap::Cell* Heatmap::cellAt(QPoint cell) const {
     if (cell.x() < 0 || cell.x() >= weeks_ || cell.y() < 0 || cell.y() >= 7) return nullptr;
-    return &cells_[static_cast<size_t>(cell.x() * 7 + cell.y())];
+    return cellForDate(firstWeekStart_.addDays(cell.x() * 7 + cell.y()));
 }
 
 const Heatmap::Cell* Heatmap::cellForDate(const QDate& date) const {
@@ -1208,14 +1205,14 @@ QColor Heatmap::levelColour(int level) const {
 
 QPoint Heatmap::cellFor(const QDate& date) const {
     const auto* entry = cellForDate(date);
-    if (!entry || !entry->filled) return {-1, -1};
-    const auto offset = int(entry - cells_.data());
+    if (!entry) return {-1, -1};
+    const auto offset = int(firstWeekStart_.daysTo(date));
     return {offset / 7, offset % 7};
 }
 
 QString Heatmap::cellText(QPoint cell) const {
     const auto* entry = cellAt(cell);
-    if (!entry || !entry->filled) return {};
+    if (!entry) return {};
     return prefix_.isEmpty()
         ? tr("%1: %2").arg(entry->date.toString(Qt::ISODate), QString::number(entry->value))
         : tr("%1, %2: %3").arg(prefix_, entry->date.toString(Qt::ISODate),
@@ -1228,7 +1225,7 @@ void Heatmap::setSelectedCell(QPoint cell) {
     selected_ = cell;
     announceSelection();
     update();
-    if (const auto* entry = cellAt(cell); entry && entry->filled)
+    if (const auto* entry = cellAt(cell))
         emit selectionChanged(entry->date, entry->value);
 }
 
@@ -1289,11 +1286,14 @@ void Heatmap::paintEvent(QPaintEvent*) {
         }
     }
     const auto radius = std::min({3.0, theme(*this).radius(), kHeatmapCell / 2.0});
-    for (int week = 0; week < weeks_; ++week) {
+    const auto visibleWeeks = std::clamp(
+        static_cast<int>(std::ceil((width() - (weekdayLabels_ ? 28.0 : 0.0)) /
+                                   (kHeatmapCell + kHeatmapGap))), 0, weeks_);
+    for (int week = 0; week < visibleWeeks; ++week) {
         for (int day = 0; day < 7; ++day) {
             const auto* entry = cellAt(QPoint(week, day));
             const auto bounds = cellRect(week, day);
-            if (!entry->filled) continue;
+            if (!entry) continue;
             painter.setBrush(levelColour(entry->level));
             painter.setPen(Qt::NoPen);
             painter.drawRoundedRect(bounds, radius, radius);
@@ -1333,7 +1333,7 @@ void Heatmap::mousePressEvent(QMouseEvent* event) {
     const auto cell = cellAt(event->position());
     if (cell.x() < 0) { QWidget::mousePressEvent(event); return; }
     setSelectedCell(cell);
-    if (const auto* entry = cellAt(cell); entry && entry->filled) emit cellActivated(entry->date, entry->value);
+    if (const auto* entry = cellAt(cell)) emit cellActivated(entry->date, entry->value);
     event->accept();
 }
 
@@ -1341,7 +1341,7 @@ void Heatmap::mouseMoveEvent(QMouseEvent* event) {
     const auto cell = cellAt(event->position());
     if (cell == hovered_) return;
     hovered_ = cell;
-    if (const auto* entry = cellAt(cell); entry && entry->filled) {
+    if (cellAt(cell)) {
         setToolTip(cellText(cell));
         setAccessibleDescription(cellText(cell));
     } else {
@@ -1369,7 +1369,7 @@ void Heatmap::keyPressEvent(QKeyEvent* event) {
     case Qt::Key_Home: setSelectedCell({0, selected_.y() < 0 ? 0 : selected_.y()}); break;
     case Qt::Key_End: setSelectedCell({weeks_ - 1, selected_.y() < 0 ? 6 : selected_.y()}); break;
     case Qt::Key_Return: case Qt::Key_Enter: case Qt::Key_Space:
-        if (const auto* entry = cellAt(selected_); entry && entry->filled)
+        if (const auto* entry = cellAt(selected_))
             emit cellActivated(entry->date, entry->value);
         else return;
         break;

@@ -239,7 +239,8 @@ class Heatmap : public QWidget {
 
     /// Replaces the grid. Days need not be contiguous or ordered; the grid lays
     /// them out by date with weeks as columns, matching a contribution graph.
-    /// A value that is not finite is rejected rather than drawn as zero.
+    /// Non-finite values, invalid dates and spans wider than Qt's widget limit
+    /// are rejected without replacing the grid. Storage follows supplied days.
     std::expected<void, ValueError> setDays(QList<HeatmapDay> days);
     [[nodiscard]] QList<HeatmapDay> days() const { return input_; }
 
@@ -252,6 +253,7 @@ class Heatmap : public QWidget {
     void setLevelCount(int count);
     [[nodiscard]] int levelCount() const noexcept { return levelCount_; }
 
+    /// Invalid weekdays leave the current start unchanged.
     void setStartOfWeek(Qt::DayOfWeek day);
     [[nodiscard]] Qt::DayOfWeek startOfWeek() const noexcept { return startOfWeek_; }
     void setWeekdayLabelsVisible(bool visible);
@@ -290,23 +292,23 @@ class Heatmap : public QWidget {
     void changeEvent(QEvent* event) override;
 
   private:
-    struct Cell { QDate date; double value = 0; int level = 0; bool filled = false; };
+    struct Cell { QDate date; double value = 0; int level = 0; };
     void relayout();
     void announceSelection();
     [[nodiscard]] QRectF cellRect(int week, int day) const;
     /// The cell under a point, or an invalid cell.
     [[nodiscard]] QPoint cellAt(const QPointF& position) const;
-    /// The cell at a week column and weekday row, or null when it is out of range.
+    /// The supplied cell at a grid coordinate, or null for an empty cell.
     [[nodiscard]] const Cell* cellAt(QPoint cell) const;
     [[nodiscard]] const Cell* cellForDate(const QDate& date) const;
     [[nodiscard]] QColor levelColour(int level) const;
     void moveSelection(int weeks, int days);
     /// The days the caller supplied, sorted by date.
     QList<HeatmapDay> input_;
-    /// One entry per week column and weekday row, so the grid is complete and
-    /// every lookup is a direct index rather than a search.
+    /// Only supplied days occupy storage. Empty dates use grid arithmetic.
     std::vector<Cell> cells_;
     QHash<QDate, int> index_;
+    QDate firstWeekStart_;
     int levelCount_ = 4;
     int weeks_ = 0;
     double maximum_ = 1;
