@@ -7,6 +7,18 @@
   const params = new URLSearchParams(location.search);
   const dark = params.get('theme') === 'dark';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  let loadingTimer;
+  function reveal() {
+    requestAnimationFrame(() => requestAnimationFrame(() =>
+      parent.postMessage('shadcn-preview-ready', location.origin)));
+  }
+  function previewFailed() {
+    clearTimeout(loadingTimer);
+    const status = document.getElementById('status');
+    status.textContent = 'The live preview could not load. Reload to try again.';
+    status.hidden = false;
+    reveal();
+  }
 </script>
 <style>
   html, body, #screen { margin: 0; width: 100%; height: 100%; overflow: hidden; }
@@ -17,16 +29,18 @@
 </style>
 <div id="screen"></div>
 <div id="status" role="status">Loading C++ preview…</div>
-<script src="/shadcn-cpp/live/shadcn_gallery.js"></script>
-<script src="/shadcn-cpp/live/qtloader.js"></script>
+<script src="/shadcn-cpp/live/shadcn_gallery.js" onerror="previewFailed()"></script>
+<script src="/shadcn-cpp/live/qtloader.js" onerror="previewFailed()"></script>
 <script>
   const status = document.getElementById('status');
   const screen = document.getElementById('screen');
-  const reveal = () => requestAnimationFrame(() => requestAnimationFrame(() =>
-    parent.postMessage('shadcn-preview-ready', location.origin)));
   const args = ['--component', params.get('component') || 'button'];
   if (dark) args.push('--dark');
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) args.push('--reduced-motion');
+  if (typeof qtLoad !== 'function' || typeof window.shadcn_gallery_entry !== 'function') {
+    previewFailed();
+  } else {
+  loadingTimer = setTimeout(previewFailed, 30000);
   qtLoad({
     arguments: args,
     locateFile: name => `/shadcn-cpp/live/${name}`,
@@ -34,17 +48,18 @@
       entryFunction: window.shadcn_gallery_entry,
       containerElements: [screen],
       onLoaded: () => {
+        clearTimeout(loadingTimer);
         status.hidden = true;
         reveal();
       },
-      onExit: () => { status.textContent = 'Preview stopped. Reload to try again.'; status.hidden = false; reveal(); }
+      onExit: () => { clearTimeout(loadingTimer); status.textContent = 'Preview stopped. Reload to try again.'; status.hidden = false; reveal(); }
     }
   }).then(instance => {
     new ResizeObserver(() => instance.qtResizeContainerElement(screen)).observe(screen);
   }).catch(error => {
-    status.textContent = 'The live preview could not load. Reload to try again.';
-    reveal();
+    previewFailed();
     console.error(error);
   });
+  }
 </script>
 </html>
