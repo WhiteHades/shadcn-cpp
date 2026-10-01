@@ -193,7 +193,7 @@ install(TARGETS ${shadcn_targets} EXPORT shadcnTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES include/shadcn/core.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/shadcn)
 if(SHADCN_BUILD_WIDGETS)
-    install(FILES include/shadcn/shadcn.hpp include/shadcn/widgets.hpp include/shadcn/overlays.hpp include/shadcn/controls.hpp include/shadcn/data.hpp include/shadcn/navigation.hpp include/shadcn/feedback.hpp
+    install(FILES include/shadcn/shadcn.hpp include/shadcn/widgets.hpp include/shadcn/overlays.hpp include/shadcn/controls.hpp include/shadcn/data.hpp include/shadcn/navigation.hpp include/shadcn/feedback.hpp include/shadcn/rows.hpp
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/shadcn)
 endif()
 install(EXPORT shadcnTargets NAMESPACE shadcn:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shadcn)

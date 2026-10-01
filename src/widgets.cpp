@@ -443,13 +443,25 @@ void Input::paintEvent(QPaintEvent* event) {
     if (!property("shadcnEmbedded").toBool()) {
         QPainter painter(this);
         const auto& theme = themeFor(*this);
-        auto border = color(theme, invalid_ ? Role::Destructive : hasFocus() ? Role::Ring : Role::Input);
         auto fill = theme.mode() == ColorMode::Dark ? alpha(color(theme, Role::Input), .3)
                                                    : QColor(Qt::transparent);
         if (!isEnabled()) painter.setOpacity(.5);
-        rounded(painter, QRectF(rect()).adjusted(.5,.5,-.5,-.5), radiusFor(*this), fill, border);
+        rounded(painter, QRectF(rect()).adjusted(.5,.5,-.5,-.5), radiusFor(*this), fill);
     }
     QLineEdit::paintEvent(event);
+    // An inherited stylesheet can repaint the native panel. Draw the boundary after
+    // native text painting so a dialog's panel cannot erase it.
+    if (!property("shadcnEmbedded").toBool()) {
+        QPainter painter(this);
+        if (!isEnabled()) painter.setOpacity(.5);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const auto& theme = themeFor(*this);
+        painter.setPen(QPen(color(theme, invalid_ ? Role::Destructive : hasFocus() ? Role::Ring
+                                                                          : Role::Input), 1));
+        painter.setBrush(Qt::NoBrush);
+        const auto radius = std::min(radiusFor(*this), std::min(width(), height()) / 2.0);
+        painter.drawRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5), radius, radius);
+    }
 }
 
 Badge::Badge(const QString& text, QWidget* parent) : QLabel(text, parent) {
