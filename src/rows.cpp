@@ -66,6 +66,8 @@ QFont scaledFont(const QFont& base, double factor, QFont::Weight weight) {
 /// halves both, so a long list stays dense without becoming a different row.
 int rowInset(bool compact) { return compact ? 10 : 14; }
 int rowGap(bool compact) { return compact ? 8 : 16; }
+constexpr int progressHeight = 4;
+constexpr int progressGap = 6;
 
 /// The chevron for a branch. Drawn rather than a button, because a hit target
 /// drawn on a row is already on a target, and a second widget per row is what
@@ -116,7 +118,7 @@ int RowDelegate::rowHeight() const {
     // occupies the second line whether or not it has text, so a row does not
     // change height when it gains one.
     const auto line = QFontMetrics(font_).lineSpacing();
-    const auto track = progressShown_ ? line / 2 : 0;
+    const auto track = progressShown_ ? progressHeight + progressGap : 0;
     return std::max(compact_ ? 32 : 44, line * 2 + rowGap(compact_) + track);
 }
 
@@ -154,7 +156,9 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
         } else {
             const auto fill = hovered ? withAlpha(colour(*widget, Role::Accent), .4)
                                       : colour(*widget, Role::Background);
-            rounded(*painter, rect, radius(*widget), fill, colour(*widget, Role::Border));
+            const auto border = qobject_cast<const TreeView*>(widget)
+                                    ? QColor(Qt::transparent) : colour(*widget, Role::Border);
+            rounded(*painter, rect, radius(*widget), fill, border);
         }
         if (ringed) {
             painter->setBrush(Qt::NoBrush);
@@ -213,7 +217,8 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const auto blockHeight =
         titleMetrics.lineSpacing() + (two ? bodyMetrics.lineSpacing() : 0);
     const auto available = std::max(0, right - x - trailingWidth);
-    auto y = option.rect.top() + std::max(0, (option.rect.height() - blockHeight) / 2);
+    const auto trackSpace = progressShown_ ? progressHeight + progressGap : 0;
+    auto y = option.rect.top() + std::max(0, (option.rect.height() - trackSpace - blockHeight) / 2);
 
     painter->setFont(titleFont);
     painter->setPen(heading ? muted : foreground);
@@ -245,17 +250,18 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     // it, so it reads as belonging to the whole row. It is drawn only when the
     // caller said these rows carry progress, and only when the row reports some: a
     // rail on a row that has nothing to state says something the data does not say.
-    if (progressShown_) {
-        const auto value = rowData(index, RowRole::Progress).toDouble();
-        const auto rail = QRectF(x, option.rect.bottom() - rowInset(compact_) / 2 - 4,
-                                 std::max(0, right - x), 4.0);
+    bool hasProgress = false;
+    const auto value = rowData(index, RowRole::Progress).toDouble(&hasProgress);
+    if (progressShown_ && hasProgress && std::isfinite(value)) {
+        const auto rail = QRectF(x, option.rect.bottom() + 1 - rowGap(compact_) / 2 - progressHeight,
+                                 std::max(0, right - x), progressHeight);
         const auto corner = 2.0;
         // The rail is the primary at a fifth of its strength, not the muted fill.
         // Muted in the light theme is very nearly the page, so a rail in muted is not
         // a track a reader can see. The upstream progress component paints its own
         // track the same way, from the primary rather than from a neutral.
-        const auto railColour = accentText ? colour(*widget, Role::AccentForeground)
-                                           : withAlpha(colour(*widget, Role::Primary), .22);
+        const auto railColour = withAlpha(
+            colour(*widget, accentText ? Role::AccentForeground : Role::Primary), .22);
         const auto fillColour = accentText ? colour(*widget, Role::AccentForeground)
                                            : colour(*widget, Role::Primary);
         rounded(*painter, rail, corner, railColour);
@@ -396,9 +402,9 @@ TreeView::TreeView(QWidget* parent) : QTreeView(parent), delegate_(new RowDelega
     // chevrons: Qt's at the far left and the themed one beside the text, pointing
     // at each other.
     setRootIsDecorated(false);
-    // One level is the affordance, the gap after it, and the row's own inset, so
-    // a child's text lands where a branch's does.
-    setIndentation(disclosureSize() + 8 + rowInset(false));
+    // A child inherits the affordance and its gap. Its own text inset then
+    // aligns with the parent's text, at either density.
+    setIndentation(disclosureSize() + 8);
     // A double click on a row should select it, not double its disclosure state
     // behind a single click the reader did not make.
     setExpandsOnDoubleClick(false);
@@ -411,6 +417,19 @@ TreeView::TreeView(QWidget* parent) : QTreeView(parent), delegate_(new RowDelega
     viewport()->setAutoFillBackground(false);
     viewport()->setAttribute(Qt::WA_Hover, true);
     delegate_->setRowFont(font());
+}
+
+void TreeView::drawRow(QPainter* painter, const QStyleOptionViewItem& option,
+                       const QModelIndex& index) const {
+    auto themed = option;
+    // Keep the native row traversal and selection state, but let RowDelegate own
+    // the selection surface instead of filling the full indentation gutter.
+    themed.palette.setColor(QPalette::Highlight, Qt::transparent);
+    QTreeView::drawRow(painter, themed, index);
+}
+
+void TreeView::drawBranches(QPainter*, const QRect&, const QModelIndex&) const {
+    // RowDelegate paints the themed disclosure once, inside the row.
 }
 
 void TreeView::setCompact(bool compact) {

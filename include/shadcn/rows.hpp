@@ -42,11 +42,9 @@ class RowDelegate final : public QStyledItemDelegate {
     [[nodiscard]] bool compact() const noexcept { return compact_; }
     /// Whether rows reserve room for a progress track.
     ///
-    /// The height is uniform, so a track cannot appear on some rows and not others:
-    /// the view has to know the answer before the first row is measured, and it can
-    /// only know it from the caller. A caller whose rows all report progress turns
-    /// this on; a caller whose rows report none leaves it off, and no row then draws
-    /// an empty rail.
+    /// All rows reserve the same space to retain uniform-height virtualisation.
+    /// A track is painted only for rows reporting a finite numeric Progress role;
+    /// absent values keep the reserved space empty.
     void setProgressShown(bool shown) { progressShown_ = shown; }
     [[nodiscard]] bool progressShown() const noexcept { return progressShown_; }
     /// The height one row occupies at the current density, for a caller doing its
@@ -147,6 +145,10 @@ class TreeView : public QTreeView {
     [[nodiscard]] static constexpr int disclosureSize() noexcept { return 16; }
 
   protected:
+    void drawRow(QPainter* painter, const QStyleOptionViewItem& option,
+                 const QModelIndex& index) const override;
+    void drawBranches(QPainter* painter, const QRect& rect,
+                      const QModelIndex& index) const override;
     void mousePressEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     bool event(QEvent* event) override;
