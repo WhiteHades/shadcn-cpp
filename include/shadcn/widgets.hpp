@@ -38,6 +38,13 @@ public:
                     const QWidget* widget = nullptr) const override;
     int styleHint(StyleHint hint, const QStyleOption* option = nullptr,
                   const QWidget* widget = nullptr, QStyleHintReturn* data = nullptr) const override;
+    void drawPrimitive(PrimitiveElement element, const QStyleOption* option,
+                       QPainter* painter, const QWidget* widget = nullptr) const override;
+    using QProxyStyle::polish;
+    void polish(QPalette& palette) override;
+    void polish(QWidget* widget) override;
+protected:
+    bool eventFilter(QObject* object, QEvent* event) override;
 private:
     Theme theme_;
     MotionPolicy motion_;

@@ -21,6 +21,8 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QStyleFactory>
+#include <QStyleOption>
+#include <QToolTip>
 #include <QThread>
 #include <QVariantAnimation>
 #include <QVBoxLayout>
@@ -152,22 +154,65 @@ int Style::styleHint(StyleHint hint, const QStyleOption* option,
     if (hint == SH_FocusFrame_Mask) return 0;
     return QProxyStyle::styleHint(hint, option, widget, data);
 }
+void Style::drawPrimitive(PrimitiveElement element, const QStyleOption* option,
+                          QPainter* painter, const QWidget* widget) const {
+    if (element == PE_PanelTipLabel && option && painter) {
+        painter->save();
+        rounded(*painter, option->rect, 6, color(theme_, Role::Foreground));
+        painter->restore();
+        return;
+    }
+    QProxyStyle::drawPrimitive(element, option, painter, widget);
+}
+void Style::polish(QPalette& palette) {
+    QProxyStyle::polish(palette);
+    // Qt rebuilds class palettes when native stylesheet wrappers are polished.
+    // Keep tooltip colours in the style, not only in install's one-time palette.
+    palette.setColor(QPalette::ToolTipBase, color(theme_, Role::Foreground));
+    palette.setColor(QPalette::ToolTipText, color(theme_, Role::Background));
+}
+void Style::polish(QWidget* widget) {
+    QProxyStyle::polish(widget);
+    if (widget && widget->windowType() == Qt::ToolTip) widget->installEventFilter(this);
+}
+bool Style::eventFilter(QObject* object, QEvent* event) {
+    if (event->type() == QEvent::Show || event->type() == QEvent::PaletteChange) {
+        if (auto* widget = qobject_cast<QWidget*>(object); widget && widget->windowType() == Qt::ToolTip) {
+            auto palette = widget->palette();
+            const auto background = color(theme_, Role::Foreground);
+            const auto foreground = color(theme_, Role::Background);
+            if (palette.color(QPalette::ToolTipBase) != background ||
+                palette.color(QPalette::ToolTipText) != foreground) {
+                palette.setColor(QPalette::ToolTipBase, background);
+                palette.setColor(QPalette::ToolTipText, foreground);
+                widget->setPalette(palette);
+            }
+        }
+    }
+    return QProxyStyle::eventFilter(object, event);
+}
 void install(QApplication& app, Theme theme, MotionPolicy motion, int fontPixels) {
     if (QThread::currentThread() != app.thread())
         throw std::logic_error("shadcn::install must run on the GUI thread");
     auto palette = app.palette();
-    palette.setColor(QPalette::Window, color(theme, Role::Background));
-    palette.setColor(QPalette::WindowText, color(theme, Role::Foreground));
-    palette.setColor(QPalette::Base, color(theme, Role::Background));
-    palette.setColor(QPalette::AlternateBase, color(theme, Role::Muted));
-    palette.setColor(QPalette::Text, color(theme, Role::Foreground));
-    palette.setColor(QPalette::Button, color(theme, Role::Secondary));
-    palette.setColor(QPalette::ButtonText, color(theme, Role::SecondaryForeground));
-    palette.setColor(QPalette::Highlight, color(theme, Role::Primary));
-    palette.setColor(QPalette::HighlightedText, color(theme, Role::PrimaryForeground));
-    palette.setColor(QPalette::PlaceholderText, color(theme, Role::MutedForeground));
+    constexpr std::array groups{QPalette::Active, QPalette::Inactive, QPalette::Disabled};
+    for (const auto group : groups) {
+        palette.setColor(group, QPalette::Window, color(theme, Role::Background));
+        palette.setColor(group, QPalette::WindowText, color(theme, Role::Foreground));
+        palette.setColor(group, QPalette::Base, color(theme, Role::Background));
+        palette.setColor(group, QPalette::AlternateBase, color(theme, Role::Muted));
+        palette.setColor(group, QPalette::Text, color(theme, Role::Foreground));
+        palette.setColor(group, QPalette::Button, color(theme, Role::Secondary));
+        palette.setColor(group, QPalette::ButtonText, color(theme, Role::SecondaryForeground));
+        palette.setColor(group, QPalette::Highlight, color(theme, Role::Primary));
+        palette.setColor(group, QPalette::HighlightedText, color(theme, Role::PrimaryForeground));
+        palette.setColor(group, QPalette::PlaceholderText, color(theme, Role::MutedForeground));
+        palette.setColor(group, QPalette::ToolTipBase, color(theme, Role::Foreground));
+        palette.setColor(group, QPalette::ToolTipText, color(theme, Role::Background));
+    }
     app.setStyle(new Style(std::move(theme), motion));
     app.setPalette(palette);
+    QToolTip::setPalette(palette);
     if (fontPixels > 0) {
         static const int fontId = [] {
             initialiseFonts();
@@ -180,6 +225,8 @@ void install(QApplication& app, Theme theme, MotionPolicy motion, int fontPixels
         }
         font.setPixelSize(fontPixels);
         app.setFont(font);
+        font.setPixelSize(std::max(1, qRound(fontPixels * 12.0 / 14.0)));
+        QToolTip::setFont(font);
     }
 }
 
@@ -457,8 +504,10 @@ void Input::paintEvent(QPaintEvent* event) {
         if (!isEnabled()) painter.setOpacity(.5);
         painter.setRenderHint(QPainter::Antialiasing);
         const auto& theme = themeFor(*this);
-        painter.setPen(QPen(color(theme, invalid_ ? Role::Destructive : hasFocus() ? Role::Ring
-                                                                          : Role::Input), 1));
+        const auto border = invalid_ ? color(theme, Role::Destructive)
+                             : hasFocus() ? alpha(color(theme, Role::Ring), .5)
+                                          : color(theme, Role::Input);
+        painter.setPen(QPen(border, 1));
         painter.setBrush(Qt::NoBrush);
         const auto radius = std::min(radiusFor(*this), std::min(width(), height()) / 2.0);
         painter.drawRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5), radius, radius);
