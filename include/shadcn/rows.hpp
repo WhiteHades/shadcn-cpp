@@ -205,7 +205,8 @@ class Prose : public QTextEdit {
   public:
     explicit Prose(QWidget* parent = nullptr);
     /// Rebuilds the document stylesheet from the theme. Called on a theme change
-    /// and on a font change, so a caller never maintains it.
+    /// and on a font change, so a caller never maintains it. Translucent colour
+    /// roles are composited onto the page for the rich-text engine.
     void applyTypography();
     /// The heading levels the document exposes, in order, for a caller that needs
     /// the structure rather than the text.

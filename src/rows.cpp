@@ -795,7 +795,16 @@ Prose::Prose(QWidget* parent) : QTextEdit(parent) {
 
 void Prose::applyTypography() {
     const auto& theme = themeFor(*this);
-    const auto hex = [this](Role role) { return colour(*this, role).name(); };
+    const auto hex = [this](Role role) {
+        const auto foreground = colour(*this, role);
+        const auto background = colour(*this, Role::Background);
+        const auto alpha = foreground.alphaF();
+        // Rich-text hexadecimal colours have no alpha. Composite translucent
+        // roles onto the page rather than turning a ten-percent white border white.
+        return QColor::fromRgbF(foreground.redF() * alpha + background.redF() * (1.0F - alpha),
+                                foreground.greenF() * alpha + background.greenF() * (1.0F - alpha),
+                                foreground.blueF() * alpha + background.blueF() * (1.0F - alpha)).name();
+    };
     const auto px = [this](double factor) {
         return qMax(1, qRound(font().pixelSize() > 0 ? font().pixelSize() * factor
                                                      : font().pointSizeF() * factor));
