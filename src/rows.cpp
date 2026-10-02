@@ -7,6 +7,8 @@
 
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
+#include <QAbstractItemModel>
+#include <QEasingCurve>
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QMouseEvent>
@@ -14,8 +16,11 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QScrollBar>
+#include <QKeyEvent>
+#include <QHideEvent>
 #include <QTextBlock>
 #include <QTextDocument>
+#include <QTextLayout>
 
 #include <algorithm>
 #include <cmath>
@@ -68,6 +73,30 @@ int rowInset(bool compact) { return compact ? 10 : 14; }
 int rowGap(bool compact) { return compact ? 8 : 16; }
 constexpr int progressHeight = 4;
 constexpr int progressGap = 6;
+
+QStringList wrappedLines(const QString& text, const QFont& font, int width, int limit) {
+    QStringList lines;
+    QList<int> starts;
+    QTextLayout layout(text, font);
+    layout.beginLayout();
+    while (lines.size() <= limit) {
+        auto line = layout.createLine();
+        if (!line.isValid()) break;
+        line.setLineWidth(width);
+        const auto start = line.textStart();
+        const auto length = line.textLength();
+        if (length <= 0) break;
+        starts.append(start);
+        lines.append(text.mid(start, length).trimmed());
+    }
+    layout.endLayout();
+    if (lines.size() > limit) {
+        lines.resize(limit);
+        lines.back() = QFontMetrics(font).elidedText(text.mid(starts.at(limit - 1)).trimmed(),
+                                                     Qt::ElideRight, width);
+    }
+    return lines;
+}
 
 /// The chevron for a branch. Drawn rather than a button, because a hit target
 /// drawn on a row is already on a target, and a second widget per row is what
@@ -122,7 +151,13 @@ int RowDelegate::rowHeight() const {
     return std::max(compact_ ? 32 : 44, line * 2 + rowGap(compact_) + track);
 }
 
-QSize RowDelegate::sizeHint(const QStyleOptionViewItem&, const QModelIndex&) const {
+QSize RowDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const {
+    if (presentation_ == ListPresentation::Cards) {
+        const auto title = QFontMetrics(scaledFont(font_, 1.0, QFont::Medium)).lineSpacing();
+        const auto line = QFontMetrics(font_).lineSpacing();
+        const auto track = progressShown_ ? progressHeight + progressGap : 0;
+        return {option.rect.width(), 32 + title * 2 + line * 2 + 16 + track};
+    }
     return {0, rowHeight()};
 }
 
@@ -134,6 +169,16 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     if (!widget) return;
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
+
+    if (const auto* list = qobject_cast<const ListView*>(widget)) {
+        const auto progress = list->revealProgress(index);
+        painter->setOpacity(painter->opacity() * progress);
+        bool reduced = false;
+        const auto* style = qobject_cast<const Style*>(widget->style());
+        if (!style) style = qobject_cast<const Style*>(QApplication::style());
+        reduced = style && style->motion() == MotionPolicy::Reduced;
+        if (!reduced) painter->translate(0, 8.0 * (1.0 - progress));
+    }
 
     const auto selected = option.state.testFlag(QStyle::State_Selected);
     const auto hovered = option.state.testFlag(QStyle::State_MouseOver);
@@ -154,11 +199,19 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
             // the text is measured.
             rounded(*painter, rect, radius(*widget), colour(*widget, Role::Accent));
         } else {
-            const auto fill = hovered ? withAlpha(colour(*widget, Role::Accent), .4)
-                                      : colour(*widget, Role::Background);
-            const auto border = qobject_cast<const TreeView*>(widget)
-                                    ? QColor(Qt::transparent) : colour(*widget, Role::Border);
-            rounded(*painter, rect, radius(*widget), fill, border);
+            const auto cards = presentation_ == ListPresentation::Cards;
+            auto fill = cards ? colour(*widget, Role::Card)
+                                    : hovered ? withAlpha(colour(*widget, Role::Accent), .4)
+                                              : colour(*widget, Role::Background);
+            if (cards && hovered) {
+                const auto tint = colour(*widget, Role::Accent);
+                fill = QColor::fromRgbF(fill.redF() * .92F + tint.redF() * .08F,
+                                        fill.greenF() * .92F + tint.greenF() * .08F,
+                                        fill.blueF() * .92F + tint.blueF() * .08F);
+            }
+            const auto border = cards ? colour(*widget, Role::Border) : QColor(Qt::transparent);
+            rounded(*painter, rect, cards ? themeFor(*widget).radius() * 1.4 : radius(*widget),
+                    fill, border);
         }
         if (ringed) {
             painter->setBrush(Qt::NoBrush);
@@ -169,9 +222,53 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     }
 
     const auto accentText = selected && !heading;
-    const auto foreground =
-        colour(*widget, accentText ? Role::AccentForeground : Role::Foreground);
+    const auto cards = presentation_ == ListPresentation::Cards;
+    const auto foreground = colour(*widget, accentText ? Role::AccentForeground
+                                                       : cards ? Role::CardForeground : Role::Foreground);
     const auto muted = colour(*widget, accentText ? Role::AccentForeground : Role::MutedForeground);
+
+    if (presentation_ == ListPresentation::Cards) {
+        const auto inset = 16;
+        const auto x = option.rect.left() + inset;
+        const auto width = std::max(0, option.rect.width() - inset * 2);
+        const auto titleFont = scaledFont(option.font, 1.0, QFont::DemiBold);
+        const auto bodyFont = option.font;
+        const auto title = index.data(Qt::DisplayRole).toString();
+        const auto description = rowData(index, RowRole::Description).toString();
+        const auto titleLines = wrappedLines(title, titleFont, width, 2);
+        const auto descriptionLines = wrappedLines(description, bodyFont, width, 2);
+        auto y = option.rect.top() + inset;
+        painter->setFont(titleFont);
+        painter->setPen(foreground);
+        const auto titleLine = QFontMetrics(titleFont).lineSpacing();
+        for (const auto& text : titleLines) {
+            painter->drawText(QRect(x, y, width, titleLine), Qt::AlignLeft | Qt::AlignVCenter, text);
+            y += titleLine;
+        }
+        if (!description.isEmpty()) {
+            y += 8;
+            painter->setFont(bodyFont);
+            painter->setPen(muted);
+            const auto descriptionLine = QFontMetrics(bodyFont).lineSpacing();
+            for (const auto& text : descriptionLines) {
+                painter->drawText(QRect(x, y, width, descriptionLine),
+                                  Qt::AlignLeft | Qt::AlignVCenter, text);
+                y += descriptionLine;
+            }
+        }
+        bool hasProgress = false;
+        const auto value = rowData(index, RowRole::Progress).toDouble(&hasProgress);
+        if (progressShown_ && hasProgress && std::isfinite(value)) {
+            const auto rail = QRectF(x, option.rect.bottom() - inset - progressHeight + 1,
+                                     width, progressHeight);
+            rounded(*painter, rail, 2, withAlpha(colour(*widget, Role::Primary), .22));
+            if (value > 0) rounded(*painter,
+                QRectF(rail.topLeft(), QSizeF(rail.width() * std::clamp(value, 0.0, 1.0), rail.height())),
+                2, colour(*widget, Role::Primary));
+        }
+        painter->restore();
+        return;
+    }
 
     const auto inset = rowInset(compact_);
     const auto side = compact_ ? 16 : 20;
@@ -306,6 +403,59 @@ ListView::ListView(QWidget* parent) : QListView(parent), delegate_(new RowDelega
     viewport()->setAutoFillBackground(false);
     viewport()->setAttribute(Qt::WA_Hover, true);
     delegate_->setRowFont(font());
+    revealTimer_ = new QTimer(this);
+    revealTimer_->setInterval(16);
+    connect(revealTimer_, &QTimer::timeout, this, [this] { advanceReveal(); });
+}
+
+void ListView::setModel(QAbstractItemModel* itemModel) {
+    cancelReveal();
+    disconnect(revealResetConnection_);
+    QListView::setModel(itemModel);
+    if (itemModel)
+        revealResetConnection_ = connect(itemModel, &QAbstractItemModel::modelAboutToBeReset,
+                                         this, [this] { cancelReveal(); });
+}
+
+void ListView::setPresentation(ListPresentation presentation) {
+    if (delegate_->presentation() == presentation) return;
+    cancelReveal();
+    delegate_->setPresentation(presentation);
+    if (presentation == ListPresentation::Cards) {
+        setViewMode(QListView::IconMode);
+        setFlow(QListView::LeftToRight);
+        setWrapping(true);
+        setResizeMode(QListView::Adjust);
+        setSpacing(12);
+        setContentsMargins(12, 12, 12, 12);
+        setGridSize(QSize(280, 160));
+        setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        updateCardGrid();
+    } else {
+        setViewMode(QListView::ListMode);
+        setFlow(QListView::TopToBottom);
+        setWrapping(false);
+        setResizeMode(QListView::Adjust);
+        setSpacing(0);
+        setContentsMargins(0, 0, 0, 0);
+        setGridSize(QSize());
+    }
+    scheduleDelayedItemsLayout();
+    doItemsLayout();
+    viewport()->update();
+}
+
+void ListView::updateCardGrid() {
+    if (presentation() != ListPresentation::Cards) return;
+    constexpr int gap = 12;
+    const auto minimum = std::max(280, QFontMetrics(font()).horizontalAdvance(QStringLiteral("MMMMMMMMMMMMMMMM")));
+    const auto width = std::max(1, viewport()->width());
+    const auto columns = std::max(1, (width + gap) / (minimum + gap));
+    const auto cardWidth = std::max(1, (width - gap * (columns - 1)) / columns);
+    const auto line = QFontMetrics(font()).lineSpacing();
+    const auto titleLine = QFontMetrics(scaledFont(font(), 1.0, QFont::DemiBold)).lineSpacing();
+    const auto track = progressVisible() ? progressHeight + progressGap : 0;
+    setGridSize(QSize(cardWidth, 32 + titleLine * 2 + line * 2 + 16 + track));
 }
 
 void ListView::setCompact(bool compact) {
@@ -324,8 +474,66 @@ void ListView::setCompact(bool compact) {
 void ListView::setProgressVisible(bool visible) {
     if (delegate_->progressShown() == visible) return;
     delegate_->setProgressShown(visible);
+    updateCardGrid();
     scheduleDelayedItemsLayout();
     doItemsLayout();
+    viewport()->update();
+}
+
+void ListView::revealItems(bool animated) {
+    cancelReveal();
+    if (!animated || !isVisible() || !model() || viewport()->inherits("QOpenGLWidget")) return;
+    const auto reduced = [&] {
+        const auto* style = qobject_cast<const Style*>(this->style());
+        if (!style) style = qobject_cast<const Style*>(QApplication::style());
+        return style && style->motion() == MotionPolicy::Reduced;
+    }();
+    for (const auto& rect : visibleRowRects()) {
+        const auto index = indexAt(rect.center());
+        if (!index.isValid()) continue;
+        revealEntries_.append({QPersistentModelIndex(index),
+                               reduced ? 0 : std::min(90, static_cast<int>(revealEntries_.size()) * 30),
+                               reduced});
+    }
+    if (revealEntries_.isEmpty()) return;
+    revealClock_.start();
+    revealTimer_->start();
+    viewport()->update();
+}
+
+qreal ListView::revealProgress(const QModelIndex& index) const {
+    if (!revealClock_.isValid()) return 1.0;
+    for (const auto& entry : revealEntries_) {
+        if (entry.index != index) continue;
+        const auto duration = entry.opacityOnly ? 100 : 180;
+        const auto elapsed = revealClock_.elapsed() - entry.delay;
+        if (elapsed <= 0) return 0.0;
+        if (elapsed >= duration) return 1.0;
+        if (entry.opacityOnly) return static_cast<qreal>(elapsed) / duration;
+        QEasingCurve curve(QEasingCurve::BezierSpline);
+        curve.addCubicBezierSegment(QPointF(.23, 1), QPointF(.32, 1), QPointF(1, 1));
+        return curve.valueForProgress(static_cast<qreal>(elapsed) / duration);
+    }
+    return 1.0;
+}
+
+void ListView::cancelReveal() {
+    if (revealTimer_) revealTimer_->stop();
+    revealEntries_.clear();
+    revealClock_.invalidate();
+    if (viewport()) viewport()->update();
+}
+
+void ListView::advanceReveal() {
+    const auto elapsed = revealClock_.elapsed();
+    const auto complete = std::all_of(revealEntries_.cbegin(), revealEntries_.cend(),
+        [elapsed](const RevealEntry& entry) {
+            return elapsed >= entry.delay + (entry.opacityOnly ? 100 : 180);
+        });
+    if (complete) {
+        cancelReveal();
+        return;
+    }
     viewport()->update();
 }
 
@@ -341,8 +549,16 @@ void ListView::setCompactBelow(int breakpoint) {
 
 QList<QRect> ListView::visibleRowRects() const {
     QList<QRect> result;
-    if (!model()) return result;
+    if (!model() || model()->rowCount(rootIndex()) == 0) return result;
     QModelIndex first;
+    if (presentation() == ListPresentation::Cards) {
+        const auto cell = gridSize();
+        const auto stepX = std::max(1, cell.width() / 2);
+        const auto stepY = std::max(1, cell.height() / 2);
+        for (int y = 0; y < viewport()->height() && !first.isValid(); y += stepY)
+            for (int x = 0; x < viewport()->width() && !first.isValid(); x += stepX)
+                first = indexAt(QPoint(x, y));
+    }
     // Spacing can leave the top pixel between rows. Search only the viewport,
     // keeping discovery independent of the number of scrolled model rows.
     for (int y = 0; y < viewport()->height() && !first.isValid(); ++y)
@@ -360,11 +576,22 @@ QList<QRect> ListView::visibleRowRects() const {
 
 void ListView::resizeEvent(QResizeEvent* event) {
     QListView::resizeEvent(event);
+    updateCardGrid();
     if (density_.apply(QWidget::height())) {
         delegate_->setCompact(density_.compact());
         scheduleDelayedItemsLayout();
         doItemsLayout();
     }
+}
+
+void ListView::keyPressEvent(QKeyEvent* event) {
+    cancelReveal();
+    QListView::keyPressEvent(event);
+}
+
+void ListView::hideEvent(QHideEvent* event) {
+    cancelReveal();
+    QListView::hideEvent(event);
 }
 
 bool ListView::event(QEvent* event) {
@@ -378,6 +605,7 @@ bool ListView::event(QEvent* event) {
         break;
     case QEvent::FontChange:
         delegate_->setRowFont(font());
+        updateCardGrid();
         scheduleDelayedItemsLayout();
         doItemsLayout();
         break;

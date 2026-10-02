@@ -5,12 +5,18 @@
 #include <shadcn/widgets.hpp>
 
 #include <QListView>
+#include <QElapsedTimer>
+#include <QMetaObject>
+#include <QPersistentModelIndex>
 #include <QStyledItemDelegate>
+#include <QTimer>
 #include <QTextEdit>
 #include <QTreeView>
 #include <QVariant>
 
 class QResizeEvent;
+class QKeyEvent;
+class QHideEvent;
 
 namespace shadcn {
 
@@ -27,6 +33,9 @@ enum class RowRole : int {
     Progress,                         ///< A `double` from 0 to 1, drawn as a track.
     Heading,                          ///< A row that labels the rows under it, not a target.
 };
+
+/// The arrangement used by a virtualised list.
+enum class ListPresentation { List, Cards };
 
 [[nodiscard]] QVariant rowData(const QModelIndex& index, RowRole role);
 
@@ -47,6 +56,8 @@ class RowDelegate final : public QStyledItemDelegate {
     /// absent values keep the reserved space empty.
     void setProgressShown(bool shown) { progressShown_ = shown; }
     [[nodiscard]] bool progressShown() const noexcept { return progressShown_; }
+    void setPresentation(ListPresentation presentation) { presentation_ = presentation; }
+    [[nodiscard]] ListPresentation presentation() const noexcept { return presentation_; }
     /// The height one row occupies at the current density, for a caller doing its
     /// own scrolling. It reads the delegate's own font, so a view hands it the
     /// view's font and the two agree.
@@ -63,6 +74,7 @@ class RowDelegate final : public QStyledItemDelegate {
   private:
     bool compact_ = false;
     bool progressShown_ = false;
+    ListPresentation presentation_ = ListPresentation::List;
     QFont font_;
 };
 
@@ -95,6 +107,8 @@ class ListView : public QListView {
     Q_OBJECT
   public:
     explicit ListView(QWidget* parent = nullptr);
+    void setPresentation(ListPresentation presentation);
+    [[nodiscard]] ListPresentation presentation() const noexcept { return delegate_->presentation(); }
     void setCompact(bool compact);
     [[nodiscard]] bool compactRows() const noexcept { return delegate_->compact(); }
     void setCompactBelow(int height);
@@ -109,12 +123,31 @@ class ListView : public QListView {
     [[nodiscard]] int rowHeight() const { return delegate_->rowHeight(); }
     /// The rectangles of the rows on screen, in order, for a test or a hit check.
     [[nodiscard]] QList<QRect> visibleRowRects() const;
+    /// Reveals only the items currently in the viewport, without adding per-item widgets.
+    void revealItems(bool animated = true);
+    /// Current reveal opacity for the delegate; one means no reveal is in progress.
+    [[nodiscard]] qreal revealProgress(const QModelIndex& index) const;
+    void setModel(QAbstractItemModel* model) override;
 
   protected:
     void resizeEvent(QResizeEvent* event) override;
     bool event(QEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
   private:
+    void updateCardGrid();
+    void cancelReveal();
+    void advanceReveal();
+    struct RevealEntry {
+        QPersistentModelIndex index;
+        int delay = 0;
+        bool opacityOnly = false;
+    };
+    QList<RevealEntry> revealEntries_;
+    QElapsedTimer revealClock_;
+    QTimer* revealTimer_ = nullptr;
+    QMetaObject::Connection revealResetConnection_;
     RowDelegate* delegate_ = nullptr;
     RowDensity density_;
 };
