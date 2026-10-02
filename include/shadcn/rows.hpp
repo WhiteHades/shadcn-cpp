@@ -58,7 +58,7 @@ class RowDelegate final : public QStyledItemDelegate {
     [[nodiscard]] bool progressShown() const noexcept { return progressShown_; }
     void setPresentation(ListPresentation presentation) { presentation_ = presentation; }
     [[nodiscard]] ListPresentation presentation() const noexcept { return presentation_; }
-    /// The height one row occupies at the current density, for a caller doing its
+    /// The height one row or card occupies at the current density, for a caller doing its
     /// own scrolling. It reads the delegate's own font, so a view hands it the
     /// view's font and the two agree.
     [[nodiscard]] int rowHeight() const;

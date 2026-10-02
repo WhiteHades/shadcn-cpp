@@ -148,15 +148,16 @@ int RowDelegate::rowHeight() const {
     // change height when it gains one.
     const auto line = QFontMetrics(font_).lineSpacing();
     const auto track = progressShown_ ? progressHeight + progressGap : 0;
+    if (presentation_ == ListPresentation::Cards) {
+        const auto title = QFontMetrics(scaledFont(font_, 1.0, QFont::DemiBold)).lineSpacing();
+        return 44 + title * 2 + line * 2 + 16 + track;
+    }
     return std::max(compact_ ? 32 : 44, line * 2 + rowGap(compact_) + track);
 }
 
 QSize RowDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const {
     if (presentation_ == ListPresentation::Cards) {
-        const auto title = QFontMetrics(scaledFont(font_, 1.0, QFont::Medium)).lineSpacing();
-        const auto line = QFontMetrics(font_).lineSpacing();
-        const auto track = progressShown_ ? progressHeight + progressGap : 0;
-        return {option.rect.width(), 32 + title * 2 + line * 2 + 16 + track};
+        return {option.rect.width(), rowHeight()};
     }
     return {0, rowHeight()};
 }
@@ -191,15 +192,17 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     // A heading labels the rows under it, so it is not a target: no fill, no
     // ring, and it never takes selection.
     if (!heading) {
-        const auto rect = QRectF(option.rect).adjusted(2, 1, -2, -1);
+        const auto cards = presentation_ == ListPresentation::Cards;
+        const auto rect = cards ? QRectF(option.rect).adjusted(6, 6, -6, -6)
+                                : QRectF(option.rect).adjusted(2, 1, -2, -1);
         if (selected) {
             // The selected row is the accent fill. Its text takes the accent
             // foreground, because the page foreground on an accent fill is the
             // usual way a themed list fails contrast, and it looks correct until
             // the text is measured.
-            rounded(*painter, rect, radius(*widget), colour(*widget, Role::Accent));
+            rounded(*painter, rect, cards ? themeFor(*widget).radius() * 1.4 : radius(*widget),
+                    colour(*widget, Role::Accent));
         } else {
-            const auto cards = presentation_ == ListPresentation::Cards;
             auto fill = cards ? colour(*widget, Role::Card)
                                     : hovered ? withAlpha(colour(*widget, Role::Accent), .4)
                                               : colour(*widget, Role::Background);
@@ -228,7 +231,7 @@ void RowDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const auto muted = colour(*widget, accentText ? Role::AccentForeground : Role::MutedForeground);
 
     if (presentation_ == ListPresentation::Cards) {
-        const auto inset = 16;
+        const auto inset = 22; // Six pixels of cell gutter plus sixteen inside the card.
         const auto x = option.rect.left() + inset;
         const auto width = std::max(0, option.rect.width() - inset * 2);
         const auto titleFont = scaledFont(option.font, 1.0, QFont::DemiBold);
@@ -452,10 +455,7 @@ void ListView::updateCardGrid() {
     const auto width = std::max(1, viewport()->width());
     const auto columns = std::max(1, (width + gap) / (minimum + gap));
     const auto cardWidth = std::max(1, (width - gap * (columns - 1)) / columns);
-    const auto line = QFontMetrics(font()).lineSpacing();
-    const auto titleLine = QFontMetrics(scaledFont(font(), 1.0, QFont::DemiBold)).lineSpacing();
-    const auto track = progressVisible() ? progressHeight + progressGap : 0;
-    setGridSize(QSize(cardWidth, 32 + titleLine * 2 + line * 2 + 16 + track));
+    setGridSize(QSize(cardWidth, delegate_->rowHeight()));
 }
 
 void ListView::setCompact(bool compact) {
@@ -826,6 +826,9 @@ void Prose::applyTypography() {
                                 "pre { color:$fg; background-color:$mutedFill; padding:10px 12px; border-radius:$corner; }"
                                 "pre code { background-color:transparent; padding:0; }"
                                 "blockquote { color:$muted; margin:0 0 0.7em 0; padding-left:12px; }"
+                                "table { border-collapse:collapse; margin-bottom:12px; }"
+                                "td, th { padding:8px 12px; border:1px solid $border; }"
+                                "th { color:$fg; font-weight:600; background-color:$mutedFill; }"
                                 "hr { color:$border; height:1px; }");
     sheet.replace("$corner", corner).replace("$h3", h3).replace("$h1", h1)
         .replace("$body", body)
