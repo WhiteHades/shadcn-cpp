@@ -22,6 +22,7 @@
 #include <numbers>
 #include <shadcn/data.hpp>
 #include "focus_ring.hpp"
+#include "scrollbar_style.hpp"
 #include <stdexcept>
 
 namespace shadcn {
@@ -196,6 +197,8 @@ Command::Command(QWidget* parent)
     search_->setAccessibleName(tr("Search commands"));
     search_->installEventFilter(this);
     list_->setFrameShape(QFrame::NoFrame);
+    list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     list_->setAccessibleName(tr("Commands"));
     list_->setMouseTracking(true);
     list_->setMinimumHeight(120);
@@ -286,6 +289,7 @@ void Command::refreshTheme() {
                        .arg(css(*this, Role::Popover), css(*this, Role::Foreground),
                             css(*this, Role::Accent), css(*this, Role::Border));
     if (styleSheet() != sheet) setStyleSheet(sheet);
+    detail::refreshScrollBars(*list_);
 }
 void Command::changeEvent(QEvent* event) {
     QWidget::changeEvent(event);

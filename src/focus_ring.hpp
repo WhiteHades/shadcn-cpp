@@ -47,7 +47,7 @@ inline double focusRadiusFor(const QWidget& widget) {
     return fixed.isValid() ? fixed.toDouble() : ringTheme(widget).radius();
 }
 
-/// A ring that follows its target and paints just outside the target's bounds. It shows on
+/// A ring that follows its target and paints inside the target's bounds. It shows on
 /// keyboard focus and not on pointer focus, so a mouse user does not see it. Pass
 /// textInput when the ring should also be visible while the field has focus by pointer,
 /// which is what a text field needs to show where typing will land.
@@ -110,19 +110,21 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing);
         const auto origin = target_->mapTo(parentWidget(), QPoint(0, 0)) - pos();
         auto bounds = QRectF(QPointF(origin), QSizeF(target_->size()));
-        bounds.adjust(-.75, -.75, .75, .75);
-        const auto radius = std::min(focusRadiusFor(*target_),
-                                     std::min(target_->width(), target_->height()) / 2.0);
+        // Contain focus within the control. An external halo clips against
+        // neighbouring layouts and duplicates a text field's own boundary.
+        bounds.adjust(1, 1, -1, -1);
+        const auto radius = std::max(0.0, std::min(focusRadiusFor(*target_),
+                                     std::min(target_->width(), target_->height()) / 2.0) - 1);
         const auto& theme = ringTheme(*target_);
-        const auto destructive = target_->property("invalid").toBool() ||
+        const auto destructive = target_->property("shadcnInvalid").toBool() ||
                                  target_->property("shadcnDestructive").toBool();
         const auto pen = destructive
                 ? ringAlpha(ringColor(theme, Role::Destructive),
                             theme.mode() == ColorMode::Dark ? .4 : .2)
                 : ringAlpha(ringColor(theme, Role::Ring), .5);
-        painter.setPen(QPen(pen, 1.5));
+        painter.setPen(QPen(pen, 2));
         painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(bounds, radius + .75, radius + .75);
+        painter.drawRoundedRect(bounds, radius, radius);
     }
 
 private:
