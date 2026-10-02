@@ -48,6 +48,13 @@ layout.addWidget(&button);
 
 Link `shadcn::widgets`. Qt parents own their child widgets. The [installation guide](https://whitehades.github.io/shadcn-cpp/getting-started) includes a complete application and CMake example. `shadcn::core` is also available without Qt.
 
+`ListView` and `TreeView` read item data from a Qt model instead of allocating a
+widget per row. Use `Qt::DisplayRole` for the title and `RowRole::Description`
+for secondary text. Call `showProgress()` when the model provides
+`RowRole::Progress` values from 0 to 1. Rows without a numeric progress value
+keep that space empty. Selection, scrolling and keyboard navigation remain
+part of the view's native selection model.
+
 The optional video player uses Qt Multimedia. Build with `SHADCN_BUILD_MEDIA=ON` and link `shadcn::media`. It requires Qt 6.8.2 or later and the matching Gui and Multimedia private development headers. Rebuild the media library when changing Qt versions.
 
 MIT. Adapted from [shadcn/ui](https://github.com/shadcn-ui/ui), with its [licence retained](LICENSES/shadcn-MIT.txt). This is an independent port.

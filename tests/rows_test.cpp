@@ -12,6 +12,7 @@
 #include <QTreeWidgetItem>
 #include <QVariant>
 #include <QSet>
+#include <QDir>
 #include <memory>
 
 #include <shadcn/rows.hpp>
@@ -85,6 +86,83 @@ class CountingModel final : public QAbstractListModel {
 class RowsTest : public QObject {
     Q_OBJECT
   private slots:
+    // Failure modes: the native tree paints a selected indentation gutter; a
+    // missing progress value paints a rail; selected partial progress looks full;
+    // large or compact text touches the progress track. Exercise real views.
+    void outlineSelectionKeepsItsGutterClear() {
+        for (bool dark : {false, true}) {
+            shadcn::install(*qApp, shadcn::Theme::neutral(dark ? shadcn::ColorMode::Dark : shadcn::ColorMode::Light), shadcn::MotionPolicy::Reduced);
+            QStandardItemModel model;
+            auto* section = new QStandardItem("Section");
+            section->setData(true, static_cast<int>(shadcn::RowRole::Heading));
+            auto* child = new QStandardItem("Lesson");
+            section->appendRow(child);
+            model.appendRow(section);
+            shadcn::TreeView tree;
+            tree.setModel(&model);
+            tree.resize(360, 240);
+            tree.show();
+            tree.expandAll();
+            tree.setCurrentIndex(child->index());
+            tree.setFocus(Qt::TabFocusReason);
+            QCoreApplication::processEvents();
+            const auto row = tree.visualRect(child->index());
+            QVERIFY(row.left() > 8);
+            const auto image = tree.viewport()->grab().toImage();
+            const auto background = image.pixelColor(4, image.height() - 4);
+            QCOMPARE(image.pixelColor(4, row.center().y()), background);
+            QDir().mkpath(".tmp/row-fix");
+            QVERIFY(image.save(QString(".tmp/row-fix/gutter-%1.png").arg(dark ? "dark" : "light")));
+        }
+    }
+
+    void progressRetainsSeparationAndQuantity() {
+        for (bool dark : {false, true}) {
+            shadcn::install(*qApp, shadcn::Theme::neutral(dark ? shadcn::ColorMode::Dark : shadcn::ColorMode::Light), shadcn::MotionPolicy::Reduced);
+            for (int scale : {1, 2}) for (bool compact : {false, true}) {
+                QStandardItemModel model;
+                auto* item = new QStandardItem("Readable lesson");
+                item->setData("Description stays above the track", static_cast<int>(shadcn::RowRole::Description));
+                model.appendRow(item);
+                shadcn::TreeView tree;
+                auto font = tree.font();
+                font.setPixelSize(14 * scale);
+                tree.setFont(font);
+                tree.setCompact(compact);
+                tree.showProgress();
+                tree.setModel(&model);
+                tree.resize(640, 260);
+                tree.show();
+                tree.setCurrentIndex(item->index());
+                QCoreApplication::processEvents();
+                const auto row = tree.visualRect(item->index());
+                const auto absent = tree.viewport()->grab().toImage();
+                item->setData(0.5, static_cast<int>(shadcn::RowRole::Progress));
+                QCoreApplication::processEvents();
+                const auto present = tree.viewport()->grab().toImage();
+                // The lower-quarter difference is the progress rail, not text.
+                int railY = -1;
+                for (int y = row.top() + row.height() * 3 / 4; y < row.bottom() - 2; ++y) {
+                    if (present.pixelColor(row.center().x(), y) != absent.pixelColor(row.center().x(), y)) {
+                        railY = y;
+                        break;
+                    }
+                }
+                QVERIFY2(railY >= 0, "missing progress must not paint an empty rail");
+                QVERIFY(present.pixelColor(row.left() + row.width() / 4, railY + 1) !=
+                        present.pixelColor(row.left() + row.width() * 3 / 4, railY + 1));
+                // At least four full clear scanlines must separate text and rail.
+                const auto surface = absent.pixelColor(row.center().x(), row.top() + 3);
+                for (int y = railY - 4; y < railY; ++y)
+                    for (int x = row.left() + 20; x < row.right() - 20; ++x)
+                        QCOMPARE(absent.pixelColor(x, y), surface);
+                QDir().mkpath(".tmp/row-fix");
+                QVERIFY(present.save(QString(".tmp/row-fix/progress-%1-%2x-%3.png")
+                    .arg(dark ? "dark" : "light").arg(scale).arg(compact ? "compact" : "normal")));
+            }
+        }
+    }
+
     void visibleRowsSurviveSpacingAtTheViewportTop() {
         QStandardItemModel model;
         for(int i=0;i<100;++i)model.appendRow(new QStandardItem(QString::number(i)));
