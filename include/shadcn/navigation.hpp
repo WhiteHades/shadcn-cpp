@@ -213,13 +213,14 @@ private:
     bool handleGripVisible_ = false;
 };
 
-/// Styled splitter handle. QSplitter supplies correct keyboard and mouse semantics.
+/// Styled splitter handle with native dragging and keyboard resizing.
 class ResizableHandle : public QSplitterHandle {
     Q_OBJECT
 public:
     ResizableHandle(Qt::Orientation orientation, QSplitter* parent);
 protected:
     void paintEvent(QPaintEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
 private:
     friend class ResizablePanelGroup;
     bool gripVisible_ = false;

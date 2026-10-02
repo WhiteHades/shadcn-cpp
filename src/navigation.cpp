@@ -851,6 +851,51 @@ void ResizableHandle::paintEvent(QPaintEvent*) {
     }
 }
 
+void ResizableHandle::keyPressEvent(QKeyEvent* event) {
+    auto* owner = splitter();
+    if (!owner || !isEnabled()) {
+        QSplitterHandle::keyPressEvent(event);
+        return;
+    }
+
+    const auto key = event->key();
+    const bool horizontalArrow = key == Qt::Key_Left || key == Qt::Key_Right;
+    const bool verticalArrow = key == Qt::Key_Up || key == Qt::Key_Down;
+    if (!horizontalArrow && !verticalArrow && key != Qt::Key_Home && key != Qt::Key_End) {
+        QSplitterHandle::keyPressEvent(event);
+        return;
+    }
+    if ((orientation() == Qt::Horizontal && verticalArrow) ||
+        (orientation() == Qt::Vertical && horizontalArrow)) {
+        event->accept();
+        return;
+    }
+
+    // Qt mirrors the handle's trailing edge in RTL, so preserve its width offset.
+    int target = orientation() == Qt::Horizontal
+                     ? x() + (owner->layoutDirection() == Qt::RightToLeft ? width() : 0)
+                     : y();
+    const int extent = orientation() == Qt::Horizontal ? owner->width() : owner->height();
+    if (key == Qt::Key_Home) {
+        target = orientation() == Qt::Horizontal && owner->layoutDirection() == Qt::RightToLeft
+                     ? extent
+                     : 0;
+    } else if (key == Qt::Key_End) {
+        target = orientation() == Qt::Horizontal && owner->layoutDirection() == Qt::RightToLeft
+                     ? 0
+                     : extent;
+    } else if ((orientation() == Qt::Horizontal && horizontalArrow) ||
+               (orientation() == Qt::Vertical && verticalArrow)) {
+        const int step = std::max(1, extent / 20);
+        const int direction = key == Qt::Key_Right || key == Qt::Key_Down ? 1 : -1;
+        target += direction * step;
+    }
+
+    const int legalTarget = closestLegalPosition(target);
+    moveSplitter(legalTarget);
+    event->accept();
+}
+
 Sidebar::Sidebar(QWidget* parent)
     : QFrame(parent), headerHost_(new QWidget(this)), contentHost_(new QWidget(this)),
       footerHost_(new QWidget(this)), header_(new QVBoxLayout(headerHost_)),
