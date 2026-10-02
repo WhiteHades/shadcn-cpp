@@ -203,11 +203,14 @@ public:
     void setPanelSizes(const QList<int>& sizes);
     [[nodiscard]] QList<int> panelSizes() const;
     void setHandleVisible(bool visible);
+    /// Show the optional 4-pixel-wide by 24-pixel-long grip; hidden by default.
+    void setHandleGripVisible(bool visible);
 protected:
     QSplitterHandle* createHandle() override;
 private:
     Qt::Orientation orientation_;
     bool handleVisible_ = true;
+    bool handleGripVisible_ = false;
 };
 
 /// Styled splitter handle. QSplitter supplies correct keyboard and mouse semantics.
@@ -217,6 +220,9 @@ public:
     ResizableHandle(Qt::Orientation orientation, QSplitter* parent);
 protected:
     void paintEvent(QPaintEvent*) override;
+private:
+    friend class ResizablePanelGroup;
+    bool gripVisible_ = false;
 };
 
 enum class SidebarSide { Left, Right };

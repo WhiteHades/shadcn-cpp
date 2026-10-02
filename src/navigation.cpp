@@ -807,8 +807,20 @@ void ResizablePanelGroup::setHandleVisible(bool visible) {
     setHandleWidth(visible ? 24 : 0);
 }
 
+void ResizablePanelGroup::setHandleGripVisible(bool visible) {
+    handleGripVisible_ = visible;
+    for (int index = 1; index < count(); ++index) {
+        if (auto* splitterHandle = qobject_cast<ResizableHandle*>(handle(index))) {
+            splitterHandle->gripVisible_ = visible;
+            splitterHandle->update();
+        }
+    }
+}
+
 QSplitterHandle* ResizablePanelGroup::createHandle() {
-    return new ResizableHandle(orientation_, this);
+    auto* splitterHandle = new ResizableHandle(orientation_, this);
+    splitterHandle->gripVisible_ = handleGripVisible_;
+    return splitterHandle;
 }
 
 ResizableHandle::ResizableHandle(Qt::Orientation orientation, QSplitter* parent)
@@ -818,20 +830,24 @@ ResizableHandle::ResizableHandle(Qt::Orientation orientation, QSplitter* parent)
     setAccessibleName(tr("Resize panels"));
     setAccessibleDescription(orientation == Qt::Horizontal ? tr("Drag or use the arrow keys to resize the panels side by side")
                                                           : tr("Drag or use the arrow keys to resize the panels top to bottom"));
-    // This handle paints its own divider, so Qt's focus frame is not drawn. Without a
-    // replacement the handle is keyboard reachable and shows nothing on focus.
+    // This handle paints its own one-pixel divider and optional grip, so Qt's focus frame
+    // is not drawn. Without a replacement the keyboard-reachable handle has no focus cue.
     new detail::FocusRing(*this);
 }
 
 void ResizableHandle::paintEvent(QPaintEvent*) {
     QPainter painter(this);
-    painter.fillRect(rect(), colour(*this, Role::Border));
-    painter.setBrush(colour(*this, Role::MutedForeground));
+    painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
+    painter.setBrush(colour(*this, Role::Border));
     if (orientation() == Qt::Horizontal) {
-        painter.drawRoundedRect(QRectF(width() / 2.0 - 2, height() / 2.0 - 12, 4, 24), 2, 2);
+        painter.fillRect(width() / 2, 0, 1, height(), colour(*this, Role::Border));
+        if (gripVisible_)
+            painter.drawRoundedRect(QRectF(width() / 2.0 - 2, height() / 2.0 - 12, 4, 24), 2, 2);
     } else {
-        painter.drawRoundedRect(QRectF(width() / 2.0 - 12, height() / 2.0 - 2, 24, 4), 2, 2);
+        painter.fillRect(0, height() / 2, width(), 1, colour(*this, Role::Border));
+        if (gripVisible_)
+            painter.drawRoundedRect(QRectF(width() / 2.0 - 12, height() / 2.0 - 2, 24, 4), 2, 2);
     }
 }
 
